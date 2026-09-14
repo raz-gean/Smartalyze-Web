@@ -78,11 +78,63 @@ function strategyLabel(s: MissingStrategy): string {
   }
 }
 
-function getSummaryTone(label: string, value: number | string | null | undefined): string {
-  const n = typeof value === "number" ? value : Number(value ?? 0);
-  if (label === "Missing cells") return n > 0 ? "border-yellow-200 bg-yellow-50 text-yellow-800" : "border-green-200 bg-green-50 text-green-800";
-  if (label === "Duplicates") return n > 0 ? "border-red-200 bg-red-50 text-red-800" : "border-green-200 bg-green-50 text-green-800";
+type CleaningImpactMetric = {
+  key: "row_count" | "column_count" | "missing_cells" | "duplicate_rows";
+  label: string;
+  unit: string;
+  original: number | null;
+  cleaned: number | null;
+  improvementMetric: boolean;
+};
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function formatMetricValue(value: number | null): string {
+  return value === null ? "-" : value.toLocaleString();
+}
+
+function getOriginalSummaryValue(workspace: DatasetWorkspace, key: CleaningImpactMetric["key"]): number | null {
+  const summary = workspace.dataset.summary_json ?? {};
+  if (key === "row_count") return toFiniteNumber(summary.row_count) ?? toFiniteNumber(workspace.dataset.row_count);
+  if (key === "column_count") return toFiniteNumber(summary.column_count) ?? toFiniteNumber(workspace.dataset.column_count);
+  return toFiniteNumber(summary[key]);
+}
+
+function getCleanedSummaryValue(cleaningResult: CleanApplyResponse, key: CleaningImpactMetric["key"]): number | null {
+  return toFiniteNumber(cleaningResult.summary?.[key]);
+}
+
+function getImpactTone(metric: CleaningImpactMetric): string {
+  if (!metric.improvementMetric || metric.original === null || metric.cleaned === null) {
+    return "border-slate-200 bg-slate-50 text-slate-700";
+  }
+  if (metric.cleaned < metric.original) return "border-green-200 bg-green-50 text-green-800";
+  if (metric.cleaned > metric.original) return "border-amber-200 bg-amber-50 text-amber-800";
   return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function getImpactDescription(metric: CleaningImpactMetric): string {
+  if (metric.original === null || metric.cleaned === null) return "Comparison unavailable";
+
+  const diff = metric.cleaned - metric.original;
+  const amount = Math.abs(diff).toLocaleString();
+  const pluralUnit = Math.abs(diff) === 1 ? metric.unit : `${metric.unit}s`;
+
+  if (diff === 0) return `No change in ${metric.label.toLowerCase()}`;
+
+  if (metric.key === "missing_cells" && diff < 0) return `${amount} missing ${pluralUnit} removed or resolved`;
+  if (metric.key === "missing_cells" && diff > 0) return `${amount} missing ${pluralUnit} added`;
+  if (metric.key === "duplicate_rows" && diff < 0) return `${amount} duplicate ${pluralUnit} removed`;
+  if (metric.key === "duplicate_rows" && diff > 0) return `${amount} duplicate ${pluralUnit} added`;
+
+  return `${diff > 0 ? "+" : "-"}${amount} ${pluralUnit}`;
 }
 
 type CellIssue = "missing" | "type_mismatch" | "pseudo_null" | "variant" | "outlier" | "format_mismatch" | null;
@@ -327,6 +379,12 @@ export function PrepareTab(props: PrepareTabProps) {
   const availableColumns = workspace.dataset.columns_json?.map((c) => String(c.name ?? "")).filter(Boolean) ?? [];
   const cleaningIssues = cleaningDetection?.issues ?? [];
   const queuedDerivedColumns = cleaningOperations.filter((op) => op.operation_type === "derive_column");
+  const cleaningImpactMetrics: CleaningImpactMetric[] = [
+    { key: "row_count", label: "Row count", unit: "row", original: getOriginalSummaryValue(workspace, "row_count"), cleaned: cleaningResult ? getCleanedSummaryValue(cleaningResult, "row_count") : null, improvementMetric: false },
+    { key: "column_count", label: "Column count", unit: "column", original: getOriginalSummaryValue(workspace, "column_count"), cleaned: cleaningResult ? getCleanedSummaryValue(cleaningResult, "column_count") : null, improvementMetric: false },
+    { key: "missing_cells", label: "Missing cells", unit: "cell", original: getOriginalSummaryValue(workspace, "missing_cells"), cleaned: cleaningResult ? getCleanedSummaryValue(cleaningResult, "missing_cells") : null, improvementMetric: true },
+    { key: "duplicate_rows", label: "Duplicate rows", unit: "row", original: getOriginalSummaryValue(workspace, "duplicate_rows"), cleaned: cleaningResult ? getCleanedSummaryValue(cleaningResult, "duplicate_rows") : null, improvementMetric: true },
+  ];
 
   function handleAddDerivedColumn() {
     const name = newColumnName.trim();
@@ -1179,12 +1237,38 @@ export function PrepareTab(props: PrepareTabProps) {
                       Show {Math.min(20, cleaningResult.preview.length - cleanedPreviewLimit)} more rows ({cleaningResult.preview.length - cleanedPreviewLimit} remaining)
                     </button>
                   )}
-                  <dl className="mt-4 grid grid-cols-4 gap-3 text-sm">
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3"><dt className="text-slate-500">Rows</dt><dd className="font-medium text-slate-950">{String(cleaningResult.summary.row_count ?? "-")}</dd></div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3"><dt className="text-slate-500">Columns</dt><dd className="font-medium text-slate-950">{String(cleaningResult.summary.column_count ?? "-")}</dd></div>
-                    <div className={`rounded-xl border p-3 ${getSummaryTone("Missing cells", Number(cleaningResult.summary.missing_cells ?? 0))}`}><dt className="text-slate-500">Missing</dt><dd className="font-medium">{String(cleaningResult.summary.missing_cells ?? "-")}</dd></div>
-                    <div className={`rounded-xl border p-3 ${getSummaryTone("Duplicates", Number(cleaningResult.summary.duplicate_rows ?? 0))}`}><dt className="text-slate-500">Duplicates</dt><dd className="font-medium">{String(cleaningResult.summary.duplicate_rows ?? "-")}</dd></div>
-                  </dl>
+                  <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                      <div>
+                        <h4 className="font-semibold text-slate-950">Cleaning Impact Summary</h4>
+                        <p className="mt-1 text-sm text-slate-600">Original dataset compared with the cleaned preview.</p>
+                      </div>
+                    </div>
+                    <dl className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      {cleaningImpactMetrics.map((metric) => {
+                        const diff = metric.original !== null && metric.cleaned !== null ? metric.cleaned - metric.original : null;
+                        return (
+                          <div key={metric.key} className={`rounded-xl border p-3 ${getImpactTone(metric)}`}>
+                            <dt className="text-xs font-medium text-slate-500">{metric.label}</dt>
+                            <dd className="mt-2 text-lg font-semibold text-slate-950">
+                              {formatMetricValue(metric.original)}
+                              <span className="mx-2 text-sm font-medium text-slate-400">&rarr;</span>
+                              {formatMetricValue(metric.cleaned)}
+                            </dd>
+                            <p className="mt-1 text-xs font-medium">
+                              {diff !== null && diff !== 0 && (
+                                <span className={metric.improvementMetric && diff < 0 ? "text-green-700" : "text-slate-500"}>
+                                  {diff > 0 ? "+" : "-"}{Math.abs(diff).toLocaleString()}
+                                  {" "}
+                                </span>
+                              )}
+                              {getImpactDescription(metric)}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </dl>
+                  </div>
                 </div>
               )}
             </>
