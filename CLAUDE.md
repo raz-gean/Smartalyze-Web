@@ -6,6 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Smartalyze is a capstone web app for uploading messy datasets and cleaning / exploring / analyzing / predicting on them. FastAPI backend (`backend/`) + Next.js (App Router) frontend (`frontend/`), talking over a JSON REST API with Bearer-token auth.
 
+## Capstone context
+
+This is a BSIT capstone at Davao Del Norte State College (DNSC), so the code is judged against a written document and panel defense, not just whether it runs. Target users are **non-technical** (students, researchers, small business owners): plain-language labels, guided workflow cards, no jargon in the UI.
+
+- `docs/` holds the capstone paperwork (not app code): `CAPSTONE DOCUMENT_2.pdf`, `defense-3rd-year-minutes.md` (panel comments; all 10 System items are implemented), `capstone-document-issues.md` (documentation audit), `background-agenda-alignment.md` (DNSC SAILS / CHED A.C.H.I.E.V.E. / DOST HNRDA), and `.drawio` diagrams (UseCase, DFD-Level1, CFD-Level0, ERD, SystemArchitecture, ConceptualFramework).
+- `README.md` and `features.md` describe the shipped feature set and can lag the code (the README still shows old env var names). Trust the code and this file first.
+- When a code change adds, removes, or renames a user-facing feature, say which diagram or doc section would go stale (the use case diagram is already known to be missing Analysis/Detect/Predict/AI Chat). Don't edit `docs/` unless asked.
+- Project skills live in `.claude/skills/`: `add-cleaning-operation`, `add-endpoint`, `capstone-docs`, `defense-qa-prep`, `doc-code-consistency-check`, `statistician-validation-pack`.
+
 ## Commands
 
 ### Backend (`backend/`)
@@ -14,7 +23,7 @@ Smartalyze is a capstone web app for uploading messy datasets and cleaning / exp
 uvicorn app.main:app --reload          # run the API (localhost:8000)
 pip install -r requirements.txt        # install deps (no pyproject.toml; requirements.txt is the source of truth)
 ```
-There is no backend test suite, linter, or formatter configured — don't assume `pytest`/`ruff`/`black` exist. Tables are created automatically on startup (`Base.metadata.create_all` in `app/main.py`); there is no Alembic migration system, so schema changes just require restarting the app against a dev DB.
+There is no linter or formatter configured, and `pytest` is not in `requirements.txt`. The only backend tests are in `backend/tests/test_quality_detection.py` (cleaning/quality-detection logic); run them with `python -m tests.test_quality_detection` from `backend/` (no extra deps), or `pytest tests/` if you've installed it. Tables are created automatically on startup (`Base.metadata.create_all` in `app/main.py`); there is no Alembic migration system, so schema changes just require restarting the app against a dev DB.
 
 ### Frontend (`frontend/`)
 ```bash
