@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { getCurrentUser, AuthUser } from "@/lib/api";
-import { clearStoredToken, getStoredToken } from "@/lib/auth";
+import { getStoredToken, signOut } from "@/lib/auth";
 
 function NavAvatar({ user }: { user: AuthUser | null }) {
   if (!user) return null;
@@ -51,7 +51,7 @@ export default function Navbar() {
   if (!showOnRoute || !token) return null;
 
   function handleLogout() {
-    clearStoredToken();
+    signOut();
     setToken(null);
     router.replace("/login");
   }

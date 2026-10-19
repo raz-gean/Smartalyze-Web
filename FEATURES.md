@@ -11,6 +11,8 @@
 | User registration | ✅ | Email + username + password (bcrypt) |
 | User login | ✅ | Bearer token issued on success |
 | Token expiration enforcement | ✅ | `expires_at` and `revoked_at` checked server-side |
+| Login required for AI features | ✅ | All `/ai/*` endpoints validate the session token, like every other endpoint |
+| Logout clears local drafts | ✅ | Unsaved editor drafts are removed from the browser on sign-out (shared computers) |
 | Change username | ✅ | Profile page |
 | Change password | ✅ | Profile page |
 | Delete account | ✅ | Cascades to datasets |
@@ -42,6 +44,7 @@
 | Fill missing — median | ✅ | |
 | Fill missing — mode | ✅ | |
 | Fill missing — custom value | ✅ | |
+| Smart fill (fill from a related column) | ✅ | e.g. City "Panabo" → Zip Code 8105. Suggested when ≥80% of known values agree with their group's usual value; city names matched ignoring case/extra spaces; works even when most values are missing; ignores ID-like columns |
 | Drop rows with nulls | ✅ | |
 | Drop column | ✅ | |
 | Remove duplicates | ✅ | |
@@ -63,7 +66,7 @@
 |---|---|---|
 | Column Analysis | ✅ | dtype, null %, unique count, mean, median, mode, min, max |
 | Aggregation (group by + agg function) | ✅ | Sum, mean, count, min, max; rendered as bar chart |
-| Trend detection per numeric column | ✅ | Linear slope — Increasing / Stable / Decreasing badge |
+| Trend detection per numeric column | ✅ | Linear slope — Increasing / Stable / Decreasing / Volatile (R² < 0.1) badge |
 | Trend chart | ✅ | Recharts line chart with direction label |
 
 ---
@@ -86,7 +89,7 @@
 | Date column (optional) | ✅ | Time-axis labeling |
 | Steps-ahead configuration (1-20) | ✅ | |
 | Predicted value per step | ✅ | |
-| Confidence band (lower/upper bound) | ✅ | +/- 1.96 x residual std |
+| Confidence band (lower/upper bound) | ✅ | +/- 1 x residual standard error, sqrt(SS_res / (n-2)) (about a 68% band, not 95%) |
 | R-squared (model fit quality) | ✅ | Shown as High/Medium/Low confidence badge |
 | Slope / trend rate | ✅ | Per-period change, color-coded |
 | Forecast area chart | ✅ | Recharts AreaChart with shaded confidence band |
@@ -99,9 +102,12 @@
 | Feature | Status | Notes |
 |---|---|---|
 | Inline cell editing | ✅ | Click any cell to edit |
-| Undo (Ctrl+Z) | ✅ | Full edit history |
-| Redo (Ctrl+Y) | ✅ | Full edit history |
-| Save edits | ✅ | Persisted to dataset |
+| Undo (Ctrl+Z) | ✅ | Last 50 edits |
+| Redo (Ctrl+Y) | ✅ | Last 50 edits |
+| Save edits | ✅ | Persisted to dataset as a new version |
+| Draft autosave | ✅ | Unsaved edits (cells, rows, column renames) kept in the browser; survive refresh/close |
+| Restore or discard draft | ✅ | On return, user chooses "Restore edits" or "Discard"; drafts from an older version are cleared, never applied |
+| Leave-page warning | ✅ | Browser warns before closing/refreshing with unsaved edits |
 | Row virtualization | ✅ | @tanstack/react-virtual for large datasets |
 
 ---

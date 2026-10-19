@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { deleteAccount, getCurrentUser, updateAvatar, updatePassword, updateUsername, AuthUser } from "@/lib/api";
-import { clearStoredToken, getStoredToken } from "@/lib/auth";
+import { clearStoredToken, getStoredToken, signOut } from "@/lib/auth";
 
 type FeedbackTone = "neutral" | "success" | "warning" | "error";
 
@@ -174,7 +174,7 @@ export default function ProfilePage() {
     setDeleteMsg("");
     try {
       await deleteAccount(token, deletePassword);
-      clearStoredToken();
+      signOut();
       router.replace("/login");
     } catch (err) {
       setDeleteMsg(err instanceof Error ? err.message : "Could not delete account.");
@@ -183,7 +183,7 @@ export default function ProfilePage() {
   }
 
   function handleSignOut() {
-    clearStoredToken();
+    signOut();
     router.replace("/login");
   }
 

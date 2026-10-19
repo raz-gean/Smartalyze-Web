@@ -17,7 +17,7 @@ import {
 } from "recharts";
 
 import { Dataset, deleteDataset, getCurrentUser, listDatasets, renameDataset, uploadDataset } from "@/lib/api";
-import { clearStoredToken, getStoredToken } from "@/lib/auth";
+import { clearStoredToken, getStoredToken, signOut } from "@/lib/auth";
 
 type DatasetSortKey = "recent" | "name" | "size";
 
@@ -238,7 +238,7 @@ export default function DashboardPage() {
     }
   }
 
-  function handleLogout() { clearStoredToken(); router.replace("/login"); }
+  function handleLogout() { signOut(); router.replace("/login"); }
 
   function handleDragOver(e: React.DragEvent) {
     e.preventDefault();

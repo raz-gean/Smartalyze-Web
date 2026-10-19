@@ -113,12 +113,12 @@ function operationToPandas(op: CleaningOperation, idx: number): string[] {
     case "fill_pattern": {
       const key = op.key_column ?? "";
       const target = op.target_column_fill ?? "";
-      lines.push(`# Pattern fill: group by ${quoteSingle(key)}, fill missing values in ${quoteSingle(target)} with the per-group mode.`);
-      lines.push(`_groups = df.groupby(${quoteSingle(key)}, dropna=True)`);
+      lines.push(`# Pattern fill: group by ${quoteSingle(key)} (ignoring case and extra spaces), fill missing values in ${quoteSingle(target)} with the per-group mode.`);
+      lines.push(`_key = df[${quoteSingle(key)}].map(lambda v: (str(v).strip().casefold() or None) if pd.notna(v) else None)`);
       lines.push(`def _pattern_fill(s):`);
       lines.push(`    _m = s.mode(dropna=True)`);
       lines.push(`    return s.fillna(_m.iloc[0]) if len(_m) > 0 else s`);
-      lines.push(`df[${quoteSingle(target)}] = _groups[${quoteSingle(target)}].transform(_pattern_fill)`);
+      lines.push(`df[${quoteSingle(target)}] = df[${quoteSingle(target)}].fillna(df.groupby(_key, dropna=True)[${quoteSingle(target)}].transform(_pattern_fill))`);
       break;
     }
     case "derive_column": {

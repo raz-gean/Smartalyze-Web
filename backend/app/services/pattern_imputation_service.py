@@ -4,8 +4,17 @@ import pandas as pd
 
 from app.schemas.cleaning import PatternImputationGroup, PatternImputationResult
 
-_MIN_CONFIDENCE = 0.7
+# Share of known target values that must agree with their group's usual value.
+_MIN_CONFIDENCE = 0.8
 _LOW_SAMPLE_THRESHOLD = 5
+# Evidence guard: without it, a key where every value is unique (an ID column)
+# would look "100% consistent" because each group has a single known value.
+# Together with "at least 2 distinct keys" this means at least 4 known values.
+_MIN_AVG_SUPPORT_PER_GROUP = 2.0
+# A key column must repeat its values to describe a relationship: at most this
+# share of its non-null rows may be distinct values, capped for speed.
+_MAX_KEY_DISTINCT_RATIO = 0.5
+_MAX_KEY_DISTINCT = 1000
 
 
 def _is_categorical(series: pd.Series) -> bool:
@@ -17,28 +26,51 @@ def _is_categorical(series: pd.Series) -> bool:
     return pd.api.types.is_string_dtype(series) or series.dtype == object
 
 
+def _normalized_key(series: pd.Series) -> pd.Series:
+    """Grouping key that treats "Panabo", "panabo" and "PANABO " as the same value.
+
+    Shared by detection and apply so the suggested fill and the applied fill always
+    use identical groups. Blank strings count as missing keys.
+    """
+    def normalize(value: object) -> str | None:
+        if pd.isna(value):
+            return None
+        return str(value).strip().casefold() or None
+
+    return pd.Series([normalize(v) for v in series], index=series.index, dtype=object)
+
+
+def _key_cardinality_ok(series: pd.Series) -> bool:
+    key = _normalized_key(series).dropna()
+    distinct = key.nunique()
+    return 2 <= distinct <= min(_MAX_KEY_DISTINCT, len(key) * _MAX_KEY_DISTINCT_RATIO)
+
+
 def _analyze_pair(
     df: pd.DataFrame,
     key_col: str,
     target_col: str,
 ) -> PatternImputationResult | None:
     """
-    Analyse the relationship between a categorical key column and a numeric
-    target column that has missing values.  Returns None when the pattern is
-    too weak (weighted confidence < threshold).
+    Analyse the relationship between a categorical key column and a target column
+    that has missing values (e.g. City -> Zip Code). Returns None when the pattern
+    is too weak or there is too little evidence.
 
-    Two confidence dimensions:
-    - coverage   = support_count / total_in_group (how many records have a known value)
-    - consistency = consistency_count / support_count (how many known values agree on the fill)
-    - weighted_confidence = geometric mean of avg_coverage and avg_consistency
+    - per-group coverage    = support_count / total_in_group (informational only)
+    - per-group consistency = consistency_count / support_count
+    - weighted_confidence   = all known values agreeing with their group's usual value
+                              / all known values (support-weighted consistency)
+
+    How many values are missing is not evidence against the pattern, so coverage
+    does not gate the suggestion; it is the case where filling helps most.
     """
     groups: list[PatternImputationGroup] = []
     low_sample_groups: list[str] = []
-    coverage_sum = 0.0
-    consistency_sum = 0.0
-    group_count = 0
+    total_support = 0
+    total_consistent = 0
+    groups_with_fill = 0
 
-    for key_value, group_df in df.groupby(key_col, dropna=True):
+    for _, group_df in df.groupby(_normalized_key(df[key_col]), dropna=True):
         known = group_df[target_col].dropna()
         missing_mask = group_df[target_col].isna()
         fillable_count = int(missing_mask.sum())
@@ -58,7 +90,8 @@ def _analyze_pair(
         consistency_count = int((known == fill_value).sum()) if fill_value is not None else 0
         consistency_ratio = round(consistency_count / support_count, 4) if support_count > 0 else 0.0
 
-        key_str = str(key_value)
+        # Show the most common original spelling of the key, not the normalized form.
+        key_str = str(group_df[key_col].mode().iloc[0])
         if support_count < _LOW_SAMPLE_THRESHOLD:
             low_sample_groups.append(key_str)
 
@@ -90,17 +123,17 @@ def _analyze_pair(
                 explanation=explanation,
             )
         )
-        coverage_sum += coverage
-        consistency_sum += consistency_ratio
-        group_count += 1
+        total_support += support_count
+        total_consistent += consistency_count
+        if fillable_count > 0:
+            groups_with_fill += 1
 
-    if group_count == 0:
+    if not groups or groups_with_fill == 0:
+        return None
+    if total_support / len(groups) < _MIN_AVG_SUPPORT_PER_GROUP:
         return None
 
-    avg_coverage = coverage_sum / group_count
-    avg_consistency = consistency_sum / group_count
-    # Geometric mean penalises both low coverage AND low consistency equally.
-    weighted_confidence = round((avg_coverage * avg_consistency) ** 0.5, 4)
+    weighted_confidence = round(total_consistent / total_support, 4)
     if weighted_confidence < _MIN_CONFIDENCE:
         return None
 
@@ -115,13 +148,13 @@ def _analyze_pair(
 
 def find_pattern_suggestions(df: pd.DataFrame, missing_cols: list[str]) -> list[PatternImputationResult]:
     """
-    For each numeric column with missing values, find categorical columns whose
-    groups predict the missing values with high confidence.
+    For each column with missing values, find categorical columns whose groups
+    predict the missing values with high confidence.
     """
     if df.empty or not missing_cols:
         return []
 
-    categorical_cols = [c for c in df.columns if _is_categorical(df[c]) and df[c].nunique(dropna=True) <= 50]
+    categorical_cols = [c for c in df.columns if _is_categorical(df[c]) and _key_cardinality_ok(df[c])]
     numeric_missing = [
         c for c in missing_cols
         if c in df.columns
@@ -152,12 +185,12 @@ def find_pattern_suggestions(df: pd.DataFrame, missing_cols: list[str]) -> list[
 
 def apply_pattern_fill(df: pd.DataFrame, key_col: str, target_col: str) -> pd.DataFrame:
     """
-    Fill missing values in target_col using the modal value per group in key_col.
+    Fill missing values in target_col using the modal value per group in key_col
+    (grouped on the same normalized key used for detection).
     """
     df = df.copy()
-    for key_value, group_idx in df.groupby(key_col, dropna=True).groups.items():
-        group = df.loc[group_idx, target_col]
-        known = group.dropna()
+    for _, group_idx in df.groupby(_normalized_key(df[key_col]), dropna=True).groups.items():
+        known = df.loc[group_idx, target_col].dropna()
         if known.empty:
             continue
         fill_val = known.mode().iloc[0]

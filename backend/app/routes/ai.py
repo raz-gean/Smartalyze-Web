@@ -7,8 +7,10 @@ Endpoints:
 - POST /ai/analyze/chat  — follow-up chat anchored to analysis context
 """
 
-from fastapi import APIRouter, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.session import get_db
 from app.schemas.ai import (
     AIChatRequest,
     AIChatResponse,
@@ -24,6 +26,7 @@ from app.services.ai_service import (
     get_analysis_insight,
     get_analysis_chat_reply,
 )
+from app.services.auth_service import get_user_by_token
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -38,9 +41,10 @@ def _require_token(authorization: str | None) -> str:
 async def ai_suggest(
     payload: AISuggestRequest,
     authorization: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
 ):
     """Return a prioritized AI cleaning plan for the given dataset context."""
-    _require_token(authorization)
+    await get_user_by_token(db, _require_token(authorization))
     try:
         suggestion = await get_suggestion(payload.context)
     except RuntimeError as exc:
@@ -52,9 +56,10 @@ async def ai_suggest(
 async def ai_chat(
     payload: AIChatRequest,
     authorization: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
 ):
     """Answer a follow-up question about the dataset using its quality context."""
-    _require_token(authorization)
+    await get_user_by_token(db, _require_token(authorization))
     try:
         reply = await get_chat_reply(payload.context, payload.message, payload.history)
     except RuntimeError as exc:
@@ -66,9 +71,10 @@ async def ai_chat(
 async def ai_analyze(
     payload: AIAnalyzeRequest,
     authorization: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
 ):
     """Return a plain-language interpretation of explore/detect findings."""
-    _require_token(authorization)
+    await get_user_by_token(db, _require_token(authorization))
     try:
         insight = await get_analysis_insight(payload.context)
     except RuntimeError as exc:
@@ -80,9 +86,10 @@ async def ai_analyze(
 async def ai_analyze_chat(
     payload: AIAnalyzeChatRequest,
     authorization: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
 ):
     """Follow-up chat anchored to the analysis/detect context."""
-    _require_token(authorization)
+    await get_user_by_token(db, _require_token(authorization))
     try:
         reply = await get_analysis_chat_reply(payload.context, payload.message, payload.history)
     except RuntimeError as exc:

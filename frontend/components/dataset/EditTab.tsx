@@ -5,6 +5,8 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { toast } from "sonner";
 import { detectCleaningIssues, getDatasetRows, saveManualEdit } from "@/lib/api";
 import type { CleaningIssue, DatasetWorkspace } from "@/lib/api";
+import { readEditDraft, removeEditDraft, writeEditDraft } from "@/lib/editDraft";
+import type { EditDraft } from "@/lib/editDraft";
 import { DatasetHealthPanel } from "./EditTab/DatasetHealthPanel";
 import { EditableCell } from "./EditTab/EditableCell";
 import { EditToolbar } from "./EditTab/EditToolbar";
@@ -73,6 +75,7 @@ function TypeBadge({ type }: { type: string }) {
 export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabProps) {
   const datasetId = workspace.dataset.id;
   const totalRows = workspace.dataset.row_count ?? 0;
+  const baseVersionId = workspace.dataset.current_version_id ?? null;
 
   // ── Core data state ──────────────────────────────────────────────────────
   const [rows, setRows] = useState<Row[]>([]);
@@ -85,6 +88,14 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
   const [deletedRows, setDeletedRows] = useState<Set<number>>(new Set());
   const [insertedRows, setInsertedRows] = useState<Map<number, Row>>(new Map());
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
+  // Original column name -> current name. Renames rewrite `rows` keys, so a saved
+  // draft needs this to rebuild them from the freshly loaded rows.
+  const columnRenames = useRef<Map<string, string>>(new Map());
+
+  // ── Draft (unsaved edits kept in the browser across refresh) ─────────────
+  const [pendingDraft, setPendingDraft] = useState<EditDraft | null>(null);
+  const [draftChecked, setDraftChecked] = useState(false);
+  const draftWarned = useRef(false);
 
   // ── Undo / redo ──────────────────────────────────────────────────────────
   const [undoStack, setUndoStack] = useState<EditOperation[]>([]);
@@ -118,6 +129,8 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
     columns.some((c, i) => c !== originalColumns.current[i]);
   const isDirty = editedCells.size > 0 || deletedRows.size > 0 || insertedRows.size > 0 || columnsChanged;
   useEffect(() => { onDirtyChange(isDirty); }, [isDirty, onDirtyChange]);
+  // Leaving the tab unmounts the editor; its edits are no longer on screen (the draft keeps them).
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
 
   // ── Search debounce ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -154,6 +167,7 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
         setColumns(cols);
         originalRows.current = accumulated.map((r) => ({ ...r }));
         originalColumns.current = [...cols];
+        columnRenames.current = new Map();
       } catch (err) {
         if (!cancelled) setErrorMsg(String(err));
       } finally {
@@ -163,6 +177,74 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
     loadAll();
     return () => { cancelled = true; };
   }, [datasetId, token, totalRows]);
+
+  // ── Look for a saved draft once rows are loaded ──────────────────────────
+  useEffect(() => {
+    if (loadingRows || draftChecked) return;
+    const draft = readEditDraft(datasetId);
+    if (draft) {
+      if (draft.baseVersionId === baseVersionId) {
+        setPendingDraft(draft);
+      } else {
+        removeEditDraft(datasetId);
+        toast.info("Your earlier unsaved edits were cleared because this dataset has changed since.");
+      }
+    }
+    setDraftChecked(true);
+  }, [loadingRows, draftChecked, datasetId, baseVersionId]);
+
+  // ── Autosave the draft while there are unsaved edits ─────────────────────
+  // Paused until the user decides what to do with a found draft, so it isn't overwritten.
+  useEffect(() => {
+    if (loadingRows || !draftChecked || pendingDraft) return;
+    if (!isDirty) {
+      removeEditDraft(datasetId);
+      return;
+    }
+    const timer = setTimeout(() => {
+      const stored = writeEditDraft(datasetId, {
+        baseVersionId,
+        savedAt: new Date().toISOString(),
+        editedCells: [...editedCells.entries()],
+        deletedRows: [...deletedRows],
+        insertedRows: [...insertedRows.entries()],
+        columns,
+        columnRenames: [...columnRenames.current.entries()],
+      });
+      if (!stored && !draftWarned.current) {
+        draftWarned.current = true;
+        toast.warning("These edits are too large to keep as a backup in your browser. Save before leaving the page.");
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [loadingRows, draftChecked, pendingDraft, isDirty, datasetId, baseVersionId, editedCells, deletedRows, insertedRows, columns]);
+
+  function handleRestoreDraft() {
+    if (!pendingDraft) return;
+    const renames = new Map(pendingDraft.columnRenames);
+    setRows(
+      originalRows.current.map((row) => {
+        const next: Row = {};
+        for (const [k, v] of Object.entries(row)) next[renames.get(k) ?? k] = v;
+        return next;
+      })
+    );
+    columnRenames.current = renames;
+    setColumns(pendingDraft.columns);
+    setEditedCells(new Map(pendingDraft.editedCells));
+    setDeletedRows(new Set(pendingDraft.deletedRows));
+    setInsertedRows(new Map(pendingDraft.insertedRows));
+    setSelectedRows(new Set());
+    setUndoStack([]);
+    setRedoStack([]);
+    setPendingDraft(null);
+    toast.success("Your unsaved edits are back.");
+  }
+
+  function handleDiscardDraft() {
+    removeEditDraft(datasetId);
+    setPendingDraft(null);
+  }
 
   // ── Fetch AI suggestions after rows loaded ───────────────────────────────
   useEffect(() => {
@@ -362,6 +444,10 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
 
   // ── Column rename helpers ────────────────────────────────────────────────
   function renameColumnInState(oldName: string, newName: string) {
+    const renames = columnRenames.current;
+    const original = [...renames.entries()].find(([, current]) => current === oldName)?.[0] ?? oldName;
+    if (original === newName) renames.delete(original);
+    else renames.set(original, newName);
     setColumns((cols) => cols.map((c) => (c === oldName ? newName : c)));
     setRows((rs) =>
       rs.map((row) => {
@@ -509,6 +595,7 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
   function handleCancel() {
     setRows(originalRows.current.map((r) => ({ ...r })));
     setColumns([...originalColumns.current]);
+    columnRenames.current = new Map();
     setEditedCells(new Map());
     setDeletedRows(new Set());
     setInsertedRows(new Map());
@@ -552,6 +639,7 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
       setRows(records.map((r) => ({ ...r })));
       originalRows.current = records.map((r) => ({ ...r }));
       originalColumns.current = [...columns];
+      columnRenames.current = new Map();
 
       // Reset dirty state before reloading workspace
       setEditedCells(new Map());
@@ -686,10 +774,35 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
         </div>
       )}
 
+      {pendingDraft && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <span>
+            <span className="font-semibold">You have unsaved edits from {new Date(pendingDraft.savedAt).toLocaleString()}.</span>{" "}
+            Bring them back? (Undo history starts fresh.)
+          </span>
+          <div className="ml-auto flex gap-2">
+            <button
+              type="button"
+              onClick={handleRestoreDraft}
+              className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700"
+            >
+              Restore edits
+            </button>
+            <button
+              type="button"
+              onClick={handleDiscardDraft}
+              className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+            >
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
+
       {isDirty && (
         <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
           <span>⚠</span>
-          <span>You have unsaved changes.</span>
+          <span>You have unsaved changes. A backup is kept in this browser until you save or cancel.</span>
         </div>
       )}
 

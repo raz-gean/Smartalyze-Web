@@ -49,6 +49,7 @@ class DatasetRead(BaseModel):
     columns_json: list[dict] | None = None
     preview_json: list[dict] | None = None
     summary_json: dict | None = None
+    current_version_id: int | None = None
     created_at: datetime
 
 

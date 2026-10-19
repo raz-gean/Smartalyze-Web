@@ -30,6 +30,7 @@ export type Dataset = {
   columns_json: Array<Record<string, unknown>> | null;
   preview_json: Array<Record<string, unknown>> | null;
   summary_json: Record<string, unknown> | null;
+  current_version_id?: number | null;
   created_at: string;
 };
 

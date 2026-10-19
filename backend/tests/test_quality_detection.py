@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.schemas.cleaning import CleaningOperation
 from app.services.cleaning_service import _apply_operation, _order_operations, apply_cleaning_operations
+from app.services.pattern_imputation_service import apply_pattern_fill, find_pattern_suggestions
 from app.services.quality_detection_service import (
     analyze_quality,
     detect_categorical_variants,
@@ -163,6 +164,70 @@ def test_analyze_quality_combined():
     assert "pseudo_nulls" in kinds
     assert "format_inconsistency" in kinds
     assert "outliers" in kinds
+
+
+# ── Smart fill (pattern imputation): panel example City -> Zip Code ─────────────
+
+def _city_zip(known_per_city: int, missing_per_city: int) -> pd.DataFrame:
+    rows = []
+    for city, zip_code in [("Panabo", 8105.0), ("Tagum", 8100.0)]:
+        rows += [{"City": city, "Zip Code": zip_code}] * known_per_city
+        rows += [{"City": city, "Zip Code": None}] * missing_per_city
+    return pd.DataFrame(rows)
+
+
+def _city_zip_suggestion(frame: pd.DataFrame):
+    hits = [s for s in find_pattern_suggestions(frame, ["Zip Code"]) if s.key_column == "City"]
+    return hits[0] if hits else None
+
+
+def test_smart_fill_suggests_when_most_values_missing():
+    frame = _city_zip(known_per_city=2, missing_per_city=8)  # 80% of zips missing
+    assert _city_zip_suggestion(frame) is not None
+    out = apply_pattern_fill(frame, "City", "Zip Code")
+    assert set(out.loc[frame["City"] == "Panabo", "Zip Code"]) == {8105.0}
+    assert set(out.loc[frame["City"] == "Tagum", "Zip Code"]) == {8100.0}
+
+
+def test_smart_fill_handles_many_cities():
+    cities = [f"City{i}" for i in range(60)]
+    frame = pd.DataFrame({"City": cities * 4, "Zip Code": [1000.0 + i for i in range(60)] * 3 + [None] * 60})
+    assert _city_zip_suggestion(frame) is not None
+
+
+def test_smart_fill_groups_spelling_variants():
+    frame = pd.DataFrame({
+        "City": ["Panabo"] * 5 + ["panabo", "PANABO "] + ["Tagum"] * 5 + ["tagum"],
+        "Zip Code": [8105.0] * 5 + [None, None] + [8100.0] * 5 + [None],
+    })
+    suggestion = _city_zip_suggestion(frame)
+    assert suggestion is not None
+    assert {g.key_value for g in suggestion.groups} == {"Panabo", "Tagum"}  # most common spelling shown
+    out = apply_pattern_fill(frame, "City", "Zip Code")
+    assert out["Zip Code"].tolist() == [8105.0] * 7 + [8100.0] * 6
+
+
+def test_smart_fill_ignores_id_like_key():
+    frame = pd.DataFrame({
+        "Customer ID": [f"C{i:03d}" for i in range(20)],
+        "Zip Code": [8105.0] * 15 + [None] * 5,
+    })
+    assert not [s for s in find_pattern_suggestions(frame, ["Zip Code"]) if s.key_column == "Customer ID"]
+
+
+def test_smart_fill_skips_inconsistent_relationship():
+    frame = pd.DataFrame({
+        "City": ["Panabo"] * 8 + ["Tagum"] * 8,
+        "Zip Code": [8105.0, 8106.0, 8107.0, 8108.0, 8105.0, 8109.0, None, None] * 2,
+    })
+    assert _city_zip_suggestion(frame) is None
+
+
+def test_smart_fill_keeps_rows_with_blank_key_untouched():
+    frame = _city_zip(known_per_city=3, missing_per_city=2)
+    frame.loc[len(frame)] = {"City": None, "Zip Code": None}
+    out = apply_pattern_fill(frame, "City", "Zip Code")
+    assert pd.isna(out["Zip Code"].iloc[-1])
 
 
 def _run_all():

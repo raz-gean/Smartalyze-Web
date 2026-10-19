@@ -276,6 +276,16 @@ export default function DatasetWorkspacePage() {
   // Edit tab
   const [editTabIsDirty, setEditTabIsDirty] = useState(false);
 
+  // Browser-level warning when closing or refreshing with unsaved editor changes.
+  useEffect(() => {
+    if (!editTabIsDirty) return;
+    function warnBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+    }
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [editTabIsDirty]);
+
   // Predict
   const [predictionInputColumn, setPredictionInputColumn] = useState("");
   const [predictionTargetColumn, setPredictionTargetColumn] = useState("");
