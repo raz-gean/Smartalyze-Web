@@ -15,6 +15,7 @@ import {
   PatternImputationResult,
   UnparseableDateRow,
 } from "@/lib/api";
+import { orderColumns } from "@/lib/columnOrder";
 import { AIAdvisorPanel } from "@/components/dataset/AIAdvisorPanel";
 
 type MissingStrategy = "fill_mean" | "fill_median" | "fill_mode" | "drop_rows";
@@ -417,7 +418,7 @@ export function PrepareTab(props: PrepareTabProps) {
     detectCtx?: DetectContext | null
   ) {
     if (rows.length === 0) return <p className="text-sm text-slate-600">No preview available.</p>;
-    const cols = Object.keys(rows[0] ?? {});
+    const cols = orderColumns(Object.keys(rows[0] ?? {}), availableColumns);
     const formatBadgeCols = detectCtx?.formatInconsistentCols ?? new Set<string>();
     const cellStyles: Record<string, { cls: string; title: string }> = {
       missing: { cls: "px-4 py-3 bg-red-50 text-red-700 border-l-2 border-red-300", title: "This cell is empty — no data here" },

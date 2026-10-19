@@ -47,7 +47,7 @@ from app.schemas.filter import FilterRequest, FilterResponse
 from app.schemas.analysis import DatasetTrendRequest, DatasetPredictRequest, TrendResponse, PredictResponse
 from app.schemas.structure import StructureSummaryRequest, StructureSummaryResponse
 from app.services.analysis_service import trend_analysis, predict_column
-from app.services.dataset_snapshot import build_snapshot, snapshot_to_dataframe, snapshot_to_export_bytes
+from app.services.dataset_snapshot import snapshot_to_dataframe, snapshot_to_export_bytes
 from app.services.auth_service import get_user_by_token
 from app.services.dataset_service import (
     create_dataset_from_upload,
@@ -59,6 +59,7 @@ from app.services.dataset_service import (
     get_workspace_guidance,
     list_user_datasets,
     rename_owned_dataset,
+    save_manual_edit,
 )
 from app.services.filter_service import filter_rows
 from app.services.structure_service import compute_structure_summary
@@ -435,40 +436,10 @@ async def manual_edit_dataset(
     column list. The backend rebuilds the snapshot from scratch so column metadata,
     missing-value counts, and summary stats are all recalculated correctly.
     """
-    import pandas as pd
-
     token = _get_current_token(authorization)
     owner = await get_user_by_token(db, token)
     dataset = await get_owned_dataset(db, dataset_id, owner)
-
-    if not payload.columns:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="columns must not be empty.")
-
-    # Sanitise column names (strip whitespace, cap at 100 chars)
-    safe_columns = [str(c).strip()[:100] for c in payload.columns]
-
-    # Build a DataFrame from the submitted records, enforcing the supplied column order
-    try:
-        frame = pd.DataFrame(payload.records, columns=safe_columns)
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Could not build DataFrame: {exc}") from exc
-
-    snapshot = build_snapshot(
-        frame,
-        source_name=dataset.name,
-        file_type=dataset.file_type,
-        size_bytes=0,
-    )
-
-    new_version = await create_dataset_version(
-        db,
-        dataset,
-        CreateDatasetVersionRequest(
-            operation_type="manual_edit",
-            replace_current=True,
-            data_snapshot=snapshot,
-        ),
-    )
+    new_version = await save_manual_edit(db, dataset, payload.records, payload.columns)
 
     summary = new_version.summary_json or {}
     return ManualEditResponse(

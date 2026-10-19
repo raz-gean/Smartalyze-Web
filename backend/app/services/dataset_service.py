@@ -29,7 +29,7 @@ from app.models.dataset_action import DatasetAction
 from app.models.dataset import Dataset
 from app.models.dataset_version import DatasetVersion
 from app.schemas.dataset import CreateDatasetVersionRequest
-from app.services.dataset_snapshot import build_snapshot
+from app.services.dataset_snapshot import build_snapshot, restore_edited_dtypes
 
 ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls", ".json", ".png", ".jpg", ".jpeg"}
 PREVIEW_ROWS = 10
@@ -467,4 +467,42 @@ the new version.
 
     await db.commit()
     await db.refresh(version)
+    # The session keeps objects after commit (expire_on_commit=False), so the already-loaded
+    # current_version would still point at the old snapshot for anything returned in this request.
+    await db.refresh(dataset, attribute_names=["current_version", "versions"])
     return version
+
+
+async def save_manual_edit(
+    db: AsyncSession,
+    dataset: Dataset,
+    records: list[dict],
+    columns: list[str],
+) -> DatasetVersion:
+    """Save the Edit tab's full table as a new current version.
+
+    Column order follows `columns`; types are restored against the version being
+    replaced (see `restore_edited_dtypes`) so edits don't turn numbers into text.
+    """
+    if not columns:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="columns must not be empty.")
+
+    # Sanitise column names (strip whitespace, cap at 100 chars)
+    safe_columns = [str(c).strip()[:100] for c in columns]
+    try:
+        frame = pd.DataFrame(records, columns=safe_columns)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Could not build DataFrame: {exc}",
+        ) from exc
+
+    previous_columns = (dataset.current_snapshot or {}).get("columns")
+    frame = restore_edited_dtypes(frame, previous_columns)
+    snapshot = build_snapshot(frame, source_name=dataset.name, file_type=dataset.file_type, size_bytes=0)
+
+    return await create_dataset_version(
+        db,
+        dataset,
+        CreateDatasetVersionRequest(operation_type="manual_edit", replace_current=True, data_snapshot=snapshot),
+    )

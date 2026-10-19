@@ -5,6 +5,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { toast } from "sonner";
 import { detectCleaningIssues, getDatasetRows, saveManualEdit } from "@/lib/api";
 import type { CleaningIssue, DatasetWorkspace } from "@/lib/api";
+import { columnNames, orderColumns } from "@/lib/columnOrder";
 import { readEditDraft, removeEditDraft, writeEditDraft } from "@/lib/editDraft";
 import type { EditDraft } from "@/lib/editDraft";
 import { DatasetHealthPanel } from "./EditTab/DatasetHealthPanel";
@@ -76,6 +77,9 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
   const datasetId = workspace.dataset.id;
   const totalRows = workspace.dataset.row_count ?? 0;
   const baseVersionId = workspace.dataset.current_version_id ?? null;
+  // Read at load time without re-fetching rows whenever the workspace object changes.
+  const columnOrderRef = useRef<string[]>([]);
+  columnOrderRef.current = columnNames(workspace.dataset.columns_json);
 
   // ── Core data state ──────────────────────────────────────────────────────
   const [rows, setRows] = useState<Row[]>([]);
@@ -164,7 +168,7 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
           offset += PAGE;
         }
 
-        const cols = accumulated.length > 0 ? Object.keys(accumulated[0]) : [];
+        const cols = orderColumns(accumulated.length > 0 ? Object.keys(accumulated[0]) : [], columnOrderRef.current);
         setRows(accumulated);
         setColumns(cols);
         originalRows.current = accumulated.map((r) => ({ ...r }));

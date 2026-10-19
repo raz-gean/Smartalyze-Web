@@ -12,6 +12,7 @@ Snapshot shape (high-level):
 """
 
 import json
+from datetime import date, datetime
 from io import BytesIO
 from typing import Any, Literal
 
@@ -24,6 +25,10 @@ def normalize_value(value: Any) -> Any:
     """Convert pandas/numpy scalar values into JSON-friendly Python types."""
     if pd.isna(value):
         return None
+    # Dates are stored as ISO strings (the JSONB column can't hold Timestamps);
+    # snapshot_to_dataframe turns them back into dates using the column metadata.
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
     if hasattr(value, "item"):
         try:
             return value.item()
@@ -123,6 +128,53 @@ def snapshot_to_dataframe(snapshot: dict | None) -> pd.DataFrame:
         except Exception:
             continue
 
+    # JSONB does not keep object key order (it stores shorter keys first), so the records
+    # come back shuffled; `columns` metadata is a list and keeps the user's original order.
+    ordered = [str(column.get("name")) for column in columns_meta if column.get("name") in frame.columns]
+    ordered += [column for column in frame.columns if column not in ordered]
+    return frame[ordered]
+
+
+def restore_edited_dtypes(frame: pd.DataFrame, previous_columns: list[dict] | None) -> pd.DataFrame:
+    """Re-type columns after a manual (Edit tab) save.
+
+    The editor sends typed values back as text, so a numeric column mixing 444 and "444"
+    (or a date column round-tripped as strings) would otherwise become plain text and drop
+    out of the analysis tabs. Per column, using the previous version's type:
+    - was numeric -> numeric, only if every non-blank value parses (real text the user typed
+      is kept, not blanked; detection then flags the mixed column);
+    - was a date -> date, under the same every-value-parses rule;
+    - new or renamed column -> numeric if every non-blank value is a number, unless any
+      value has a leading zero ("0123"), which marks a code such as an ID or zip;
+    - anything else is left as it is.
+    """
+    previous = {
+        str(column.get("name")): str(column.get("data_type") or "")
+        for column in (previous_columns or [])
+        if column.get("name")
+    }
+    frame = frame.copy()
+    for name in frame.columns:
+        series = frame[name]
+        if not (series.dtype == object or pd.api.types.is_string_dtype(series)):
+            continue
+        cleaned = series.map(lambda v: None if isinstance(v, str) and not v.strip() else v)
+        present = cleaned.dropna()
+        if present.empty or present.map(lambda v: isinstance(v, bool)).any():
+            continue
+
+        prior = previous.get(str(name))
+        if prior is None or prior.startswith(("int", "float")):
+            if prior is None and present.astype(str).str.strip().str.match(r"^[+-]?0\d").any():
+                continue
+            parsed = pd.to_numeric(cleaned, errors="coerce")
+        elif prior.startswith("datetime64"):
+            parsed = pd.to_datetime(cleaned, errors="coerce", format="mixed")
+        else:
+            continue
+
+        if int(parsed.notna().sum()) == len(present):
+            frame[name] = parsed
     return frame
 
 
@@ -140,10 +192,11 @@ def snapshot_to_export_bytes(
     frame = snapshot_to_dataframe(snapshot)
 
     if export_format == "json":
-        records = snapshot.get("records")
-        if not isinstance(records, list):
-            records = frame.to_dict(orient="records")
-
+        # Built from the frame (not the stored records) so keys follow the column order.
+        records = [
+            {column: normalize_value(value) for column, value in record.items()}
+            for record in frame.to_dict(orient="records")
+        ]
         payload = json.dumps(records, ensure_ascii=False, default=str)
         return payload.encode("utf-8"), "application/json", "json"
 
