@@ -39,7 +39,8 @@
 
 | Feature | Status | Notes |
 |---|---|---|
-| Auto issue detection | ✅ | Missing values, duplicates, outliers, type mismatches, whitespace |
+| Auto issue detection | ✅ | Missing values, duplicates, outliers, type mismatches, whitespace. Code/ID columns (zip, ID, phone, etc., by column name) are not checked for outliers |
+| Recommended fixes pre-selected | ✅ | Smart fill when available, otherwise median (numbers) / most common value (text); user can untick or change any fix |
 | Fill missing — mean | ✅ | |
 | Fill missing — median | ✅ | |
 | Fill missing — mode | ✅ | |

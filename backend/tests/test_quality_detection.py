@@ -12,8 +12,12 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from types import SimpleNamespace
+
 from app.schemas.cleaning import CleaningOperation
+from app.services.analysis_service import anomaly_detection
 from app.services.cleaning_service import _apply_operation, _order_operations, apply_cleaning_operations
+from app.services.dataset_snapshot import build_snapshot
 from app.services.pattern_imputation_service import apply_pattern_fill, find_pattern_suggestions
 from app.services.quality_detection_service import (
     analyze_quality,
@@ -21,6 +25,7 @@ from app.services.quality_detection_service import (
     detect_format_inconsistency,
     detect_outliers,
     detect_pseudo_nulls,
+    is_code_column,
 )
 
 
@@ -256,6 +261,52 @@ def test_smart_fill_keeps_rows_with_blank_key_untouched():
     frame.loc[len(frame)] = {"City": None, "Zip Code": None}
     out = apply_pattern_fill(frame, "City", "Zip Code")
     assert pd.isna(out["Zip Code"].iloc[-1])
+
+
+# ── Code/ID columns and label preference ─────────────────────────────────────
+
+def test_is_code_column_matches_identifier_names():
+    for name in ["Zip Code", "zipcode", "CustomerID", "student_id", "Phone No", "Postal Code", "LRN"]:
+        assert is_code_column(name), name
+    for name in ["Sales", "Paid Amount", "Valid", "Number of items", "Hotel Rate", "Age"]:
+        assert not is_code_column(name), name
+
+
+def _sales_with_outlier_and_zip() -> pd.DataFrame:
+    return pd.DataFrame({
+        "Zip Code": [8105, 8100, 8105, 8000, 8100, 8105, 8100, 9999],
+        "Sales": [100, 110, 105, 98, 102, 107, 99, 900],
+    })
+
+
+def test_outlier_detection_skips_code_columns():
+    flagged = {o.column for o in detect_outliers(_sales_with_outlier_and_zip())}
+    assert flagged == {"Sales"}, flagged
+
+
+def test_detect_tab_anomalies_skip_code_columns():
+    snapshot = build_snapshot(_sales_with_outlier_and_zip(), source_name="t.csv", file_type="csv", size_bytes=0)
+    version = SimpleNamespace(id=1, data_snapshot=snapshot)
+    dataset = SimpleNamespace(current_version=version, versions=[version])
+    assert [c.column for c in anomaly_detection(dataset).columns] == ["Sales"]
+
+
+def test_category_variants_prefer_title_case_on_tie():
+    series = pd.Series(["PANABO", "Panabo", "panabo", "Panabo ", "Tagum", "Tagum", "Davao", "Davao"])
+    result = detect_categorical_variants(series, "City")
+    assert result is not None
+    canon = {g.canonical for g in result.groups}
+    assert "Panabo" in canon, canon
+
+
+def test_smart_fill_key_shown_in_best_spelling():
+    frame = pd.DataFrame({
+        "City": ["PANABO", "Panabo", "PANABO", "Panabo", "Tagum", "TAGUM", "Tagum", "tagum"],
+        "Zip Code": [8105.0, 8105.0, None, None, 8100.0, 8100.0, None, None],
+    })
+    suggestion = _city_zip_suggestion(frame)
+    assert suggestion is not None
+    assert {g.key_value for g in suggestion.groups} == {"Panabo", "Tagum"}
 
 
 def _run_all():

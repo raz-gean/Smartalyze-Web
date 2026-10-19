@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from app.schemas.cleaning import PatternImputationGroup, PatternImputationResult
+from app.services.quality_detection_service import preferred_label_key
 
 # Share of known target values that must agree with their group's usual value.
 _MIN_CONFIDENCE = 0.8
@@ -90,8 +91,9 @@ def _analyze_pair(
         consistency_count = int((known == fill_value).sum()) if fill_value is not None else 0
         consistency_ratio = round(consistency_count / support_count, 4) if support_count > 0 else 0.0
 
-        # Show the most common original spelling of the key, not the normalized form.
-        key_str = str(group_df[key_col].mode().iloc[0])
+        # Show the best original spelling of the key ("Panabo" over "PANABO"), not the normalized form.
+        key_counts = group_df[key_col].dropna().astype(str).value_counts()
+        key_str = min(key_counts.index, key=lambda k: preferred_label_key(k, int(key_counts[k])))
         if support_count < _LOW_SAMPLE_THRESHOLD:
             low_sample_groups.append(key_str)
 

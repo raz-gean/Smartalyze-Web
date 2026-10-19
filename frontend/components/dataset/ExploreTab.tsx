@@ -430,7 +430,7 @@ export function ExploreTab(props: ExploreTabProps) {
                   <div className="rounded-2xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <span>
-                        {colsWithMissing.length} column{colsWithMissing.length === 1 ? "" : "s"} have missing values.
+                        {colsWithMissing.length} column{colsWithMissing.length === 1 ? " has" : "s have"} missing values.
                         {mostMissingCol ? ` Highest: "${mostMissingCol.name}" (${mostMissingCol.missing_pct}%).` : ""}
                       </span>
                       <button

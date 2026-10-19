@@ -620,6 +620,7 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
 
   // ── Cancel ───────────────────────────────────────────────────────────────
   function handleCancel() {
+    if (isDirty && !window.confirm("Discard all unsaved changes?")) return;
     setRows(originalRows.current.map((r) => ({ ...r })));
     setColumns([...originalColumns.current]);
     columnRenames.current = new Map();

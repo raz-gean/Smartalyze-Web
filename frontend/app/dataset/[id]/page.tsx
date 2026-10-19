@@ -1210,7 +1210,7 @@ export default function DatasetWorkspacePage() {
                 <div>
                   <p className="font-medium text-slate-950">Replace <span className="text-indigo-700">{workspace.dataset.original_filename}</span></p>
                   <p className="mt-1 text-sm text-slate-500">Overwrites the current dataset with the cleaned result.</p>
-                  <p className="mt-1 text-xs font-medium text-red-600">This will permanently overwrite the current version.</p>
+                  <p className="mt-1 text-xs font-medium text-amber-700">This becomes the current version. You can restore the previous one anytime from History.</p>
                 </div>
               </label>
               <label className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition ${saveMode === "new" ? "border-indigo-200 bg-indigo-50" : "border-slate-200 bg-white"}`}>

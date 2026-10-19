@@ -98,6 +98,40 @@ def _date_fingerprint(value: str) -> str | None:
     return None
 
 
+# Words in a column name that mark it as an identifier or code (a label, not a measurement):
+# "Zip Code" 8000 isn't an unusually small value, so these columns get no outlier check.
+_CODE_NAME_TOKENS = {
+    "zip", "zipcode", "postal", "postcode", "code", "id", "phone", "mobile", "tel",
+    "contact", "account", "sku", "barcode", "isbn", "lrn", "tin",
+}
+_CAMEL_RE = re.compile(r"([a-z0-9])([A-Z])")
+_NAME_TOKEN_SPLIT_RE = re.compile(r"[^a-z0-9]+")
+
+
+def is_code_column(name: object) -> bool:
+    """True if the column name says it holds codes/IDs ("Zip Code", "CustomerID", "phone_no")."""
+    spaced = _CAMEL_RE.sub(r"\1 \2", str(name))
+    return any(token in _CODE_NAME_TOKENS for token in _NAME_TOKEN_SPLIT_RE.split(spaced.casefold()))
+
+
+def preferred_label_key(label: str, count: int) -> tuple:
+    """Sort key for choosing the label to show among spellings of one value.
+
+    Most frequent first; on a tie prefer no stray spaces, then Title Case > mixed case >
+    lower case > UPPER CASE ("Panabo" over "PANABO"), then the longer form ("Male" over "M").
+    """
+    stripped = label.strip()
+    if stripped.istitle():
+        casing = 0
+    elif stripped.isupper():
+        casing = 3
+    elif stripped.islower():
+        casing = 2
+    else:
+        casing = 1
+    return (-count, label != stripped, casing, -len(stripped), label)
+
+
 # --- union-find helpers (used for clustering categorical variants) ---
 def _find(parent: dict[str, str], x: str) -> str:
     root = x
@@ -198,7 +232,7 @@ def detect_categorical_variants(series: pd.Series, column: str) -> CategoryStand
             origs.extend(norm_to_origs[mn])
         if len(origs) < 2:
             continue
-        canonical = sorted(origs, key=lambda o: (-int(counts[o]), -len(o), o))[0]
+        canonical = min(origs, key=lambda o: preferred_label_key(o, int(counts[o])))
         variants = sorted((o for o in origs if o != canonical), key=lambda o: (-int(counts[o]), o))
         group_counts = {o: int(counts[o]) for o in origs}
         groups.append(CategoryVariantGroup(canonical=canonical, variants=variants, counts=group_counts))
@@ -257,7 +291,10 @@ def detect_format_inconsistency(series: pd.Series, column: str) -> dict[str, obj
 
 
 def detect_outliers(frame: pd.DataFrame) -> list[OutlierColumnSummary]:
-    """IQR outliers per numeric column (same method as the Detect-tab anomaly view)."""
+    """IQR outliers per numeric column (same method as the Detect-tab anomaly view).
+
+    Code/ID columns (see `is_code_column`) are skipped: their numbers are labels.
+    """
     df = frame.copy()
     for col in df.select_dtypes(include=["object"]).columns:
         coerced = pd.to_numeric(df[col], errors="coerce")
@@ -265,7 +302,11 @@ def detect_outliers(frame: pd.DataFrame) -> list[OutlierColumnSummary]:
             df[col] = coerced
 
     results: list[OutlierColumnSummary] = []
-    for col in [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c]) and not pd.api.types.is_bool_dtype(df[c])]:
+    numeric_cols = [
+        c for c in df.columns
+        if pd.api.types.is_numeric_dtype(df[c]) and not pd.api.types.is_bool_dtype(df[c]) and not is_code_column(c)
+    ]
+    for col in numeric_cols:
         series = df[col].dropna().astype(float)
         if len(series) < 4:
             continue

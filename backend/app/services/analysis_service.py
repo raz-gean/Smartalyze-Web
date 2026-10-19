@@ -27,6 +27,7 @@ from app.schemas.analysis import (
     TrendResponse,
 )
 from app.services.dataset_snapshot import snapshot_to_dataframe
+from app.services.quality_detection_service import is_code_column
 
 SUPPORTED_AGG_FUNCS = {"sum", "count", "mean", "min", "max"}
 
@@ -254,7 +255,7 @@ def trend_analysis(
 
 
 def anomaly_detection(dataset: Dataset, version_id: int | None = None) -> AnomalyResponse:
-    """Detect outliers in all numeric columns using the IQR method."""
+    """Detect outliers in all numeric columns using the IQR method (code/ID columns skipped)."""
     version = _get_version(dataset, version_id)
     df = snapshot_to_dataframe(version.data_snapshot)
 
@@ -263,7 +264,7 @@ def anomaly_detection(dataset: Dataset, version_id: int | None = None) -> Anomal
         if _coerced.notna().sum() >= 2:
             df[_col] = _coerced
 
-    numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+    numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c]) and not is_code_column(c)]
     col_results: list[ColumnAnomalyResult] = []
     all_outlier_indices: set[int] = set()
 

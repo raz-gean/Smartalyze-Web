@@ -69,6 +69,15 @@ function getOperationDetail(op: CleaningOperation): string {
   }
 }
 
+/** Key column of the strongest smart fill suggestion for `target`, or null if there is none. */
+function bestSmartFillKey(suggestions: PatternImputationResult[], target: string): string | null {
+  let best: PatternImputationResult | null = null;
+  for (const s of suggestions) {
+    if (s.target_column === target && (!best || s.weighted_confidence > best.weighted_confidence)) best = s;
+  }
+  return best?.key_column ?? null;
+}
+
 function strategyLabel(s: MissingStrategy): string {
   switch (s) {
     case "fill_mean": return "Average";
@@ -364,14 +373,22 @@ export function PrepareTab(props: PrepareTabProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cleaningDetection?.dataset_version_id]);
 
-  // Auto-populate queue with AI-recommended fixes when a new scan arrives
+  // Auto-populate queue with recommended fixes when a new scan arrives. A missing-value
+  // column with a smart fill suggestion gets smart fill (filling from a related column
+  // beats a column-wide median/mode); otherwise median for numbers, mode for text.
   useEffect(() => {
     if (!cleaningDetection || cleaningOperations.length > 0) return;
     const autoOps: CleaningOperation[] = [];
     if ((cleaningDetection.duplicates ?? 0) > 0) autoOps.push(buildDuplicateOperation());
     for (const issue of cleaningIssues.filter((i) => i.kind === "missing_values" && i.column)) {
       const col = issue.column ?? "";
-      autoOps.push(buildMissingValueOperation(col, getDefaultMissingStrategy(col)));
+      const suggestions = cleaningDetection.pattern_suggestions ?? [];
+      // Keep the column the user picked in the "Using:" dropdown if it still applies.
+      const chosenKey = selectedSmartFillKey[col];
+      const key = chosenKey && suggestions.some((s) => s.target_column === col && s.key_column === chosenKey)
+        ? chosenKey
+        : bestSmartFillKey(suggestions, col);
+      autoOps.push(key ? buildPatternImputationOperation(col, key) : buildMissingValueOperation(col, getDefaultMissingStrategy(col)));
     }
     if (autoOps.length > 0) setCleaningOperations(autoOps);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -706,7 +723,10 @@ export function PrepareTab(props: PrepareTabProps) {
                             <strong>{dataIssueCount} data</strong>
                             {formattingIssueCount > 0 && <> · <strong>{formattingIssueCount} formatting</strong></>}
                             {outlierSummaries.length > 0 && <> · <strong>{outlierSummaries.length} statistical</strong></>}
-                            {" "}issue{totalIssueCount !== 1 ? "s" : ""} found — {cleaningOperations.length} fix{cleaningOperations.length !== 1 ? "es" : ""} selected. Uncheck anything you don&apos;t want, then hit Apply.
+                            {" "}issue{totalIssueCount !== 1 ? "s" : ""} found —{" "}
+                            {cleaningOperations.length > 0
+                              ? <>{cleaningOperations.length} fix{cleaningOperations.length !== 1 ? "es" : ""} selected. Uncheck anything you don&apos;t want, then hit Apply.</>
+                              : <>no fixes selected yet. Tick the ones you want, then hit Apply.</>}
                           </>
                         ) : (
                           <strong>Your data looks clean — no issues detected.</strong>
@@ -739,7 +759,7 @@ export function PrepareTab(props: PrepareTabProps) {
                             const queued = hasQueuedOperation(op);
                             return (
                               <div className="flex items-start gap-3 px-5 py-3.5">
-                                <button type="button" className={`mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition ${queued ? "border-indigo-600 bg-indigo-600" : "border-slate-300 bg-white hover:border-indigo-400"}`} onClick={toggleDuplicateRows} aria-label="Toggle remove duplicates">
+                                <button type="button" className={`mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition ${queued ? "border-indigo-600 bg-indigo-600" : "border-slate-300 bg-white hover:border-indigo-400"}`} onClick={toggleDuplicateRows} role="checkbox" aria-checked={queued} aria-label="Remove duplicate rows">
                                   {queued && <svg viewBox="0 0 12 9" className="h-2.5 w-2.5 stroke-white fill-none" strokeWidth="2.5"><polyline points="1,5 4,8 11,1"/></svg>}
                                 </button>
                                 <div className="flex-1 min-w-0">
@@ -759,10 +779,11 @@ export function PrepareTab(props: PrepareTabProps) {
                             const queued = hasQueuedOperation(op);
                             const count = Number(issue.details?.missing_values ?? 0);
                             const pct = (workspace.dataset.row_count ?? 0) > 0 ? ((count / (workspace.dataset.row_count ?? 1)) * 100).toFixed(1) : "0.0";
-                            const aiPick = getDefaultMissingStrategy(col);
+                            const recommended = getDefaultMissingStrategy(col);
+                            const hasSmartFill = smartFillByTarget.has(col);
                             return (
                               <div key={col} className="flex items-start gap-3 px-5 py-3.5">
-                                <button type="button" className={`mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition ${queued ? "border-indigo-600 bg-indigo-600" : "border-slate-300 bg-white hover:border-indigo-400"}`} onClick={() => addMissingValueOperation(col)} aria-label={`Toggle fix for ${col}`}>
+                                <button type="button" className={`mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition ${queued ? "border-indigo-600 bg-indigo-600" : "border-slate-300 bg-white hover:border-indigo-400"}`} onClick={() => addMissingValueOperation(col)} role="checkbox" aria-checked={queued} aria-label={`Fill empty cells in ${col}`}>
                                   {queued && <svg viewBox="0 0 12 9" className="h-2.5 w-2.5 stroke-white fill-none" strokeWidth="2.5"><polyline points="1,5 4,8 11,1"/></svg>}
                                 </button>
                                 <div className="flex-1 min-w-0">
@@ -776,12 +797,17 @@ export function PrepareTab(props: PrepareTabProps) {
                                         setMissingValueStrategies((s) => ({ ...s, [col]: e.target.value as MissingStrategy }));
                                       }}
                                     >
-                                      <option value={aiPick}>{strategyLabel(aiPick)} (AI pick)</option>
+                                      <option value={recommended}>{strategyLabel(recommended)}{hasSmartFill ? "" : " (Recommended)"}</option>
                                       {(["fill_mean", "fill_median", "fill_mode", "drop_rows"] as MissingStrategy[])
-                                        .filter((s) => s !== aiPick)
+                                        .filter((s) => s !== recommended)
                                         .map((s) => <option key={s} value={s}>{strategyLabel(s)}</option>)}
                                     </select>
                                   </div>
+                                  {hasSmartFill && (
+                                    <p className="mt-1.5 text-xs font-medium text-emerald-700">
+                                      Smart fill is recommended for this column (see &quot;Smart fill&quot; below). It fills each blank from a related column instead of one value for all.
+                                    </p>
+                                  )}
                                 </div>
                                 <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">Missing</span>
                               </div>
@@ -793,7 +819,7 @@ export function PrepareTab(props: PrepareTabProps) {
                             const queued = hasQueuedOperation(buildReplaceWithMissingOperation(pn.column));
                             return (
                               <div key={`pn-${pn.column}`} className="flex items-start gap-3 px-5 py-3.5">
-                                <button type="button" className={`mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition ${queued ? "border-indigo-600 bg-indigo-600" : "border-slate-300 bg-white hover:border-indigo-400"}`} onClick={() => toggleReplaceWithMissing(pn.column)} aria-label={`Toggle pseudo-null fix for ${pn.column}`}>
+                                <button type="button" className={`mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition ${queued ? "border-indigo-600 bg-indigo-600" : "border-slate-300 bg-white hover:border-indigo-400"}`} onClick={() => toggleReplaceWithMissing(pn.column)} role="checkbox" aria-checked={queued} aria-label={`Convert disguised blanks in ${pn.column}`}>
                                   {queued && <svg viewBox="0 0 12 9" className="h-2.5 w-2.5 stroke-white fill-none" strokeWidth="2.5"><polyline points="1,5 4,8 11,1"/></svg>}
                                 </button>
                                 <div className="flex-1 min-w-0">
@@ -807,18 +833,20 @@ export function PrepareTab(props: PrepareTabProps) {
 
                           {/* Smart Fill */}
                           {[...smartFillByTarget.entries()].map(([target, options]) => {
-                            const selectedKey = selectedSmartFillKey[target] ?? options[0].key_column;
+                            const selectedKey = selectedSmartFillKey[target] ?? bestSmartFillKey(options, target) ?? options[0].key_column;
                             const activeSuggestion = options.find((s) => s.key_column === selectedKey) ?? options[0];
                             const op = buildPatternImputationOperation(target, selectedKey);
                             const queued = hasQueuedOperation(op);
                             const confidencePct = Math.round(activeSuggestion.weighted_confidence * 100);
                             const isExpanded = expandedSmartFill.has(target);
-                            const topGroups = [...activeSuggestion.groups].sort((a, b) => b.fillable_count - a.fillable_count).slice(0, 5);
-                            const extraCount = activeSuggestion.groups.length - topGroups.length;
+                            // Only groups that actually get filled; the rest have nothing to show.
+                            const fillGroups = activeSuggestion.groups.filter((g) => g.fillable_count > 0);
+                            const topGroups = [...fillGroups].sort((a, b) => b.fillable_count - a.fillable_count).slice(0, 5);
+                            const extraCount = fillGroups.length - topGroups.length;
                             return (
                               <div key={`sf-${target}`} className="px-5 py-3.5">
                                 <div className="flex items-start gap-3">
-                                  <button type="button" className={`mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition ${queued ? "border-emerald-500 bg-emerald-500" : "border-slate-300 bg-white hover:border-emerald-400"}`} onClick={() => togglePatternImputation(target, selectedKey)} aria-label={`Toggle smart fill for ${target}`}>
+                                  <button type="button" className={`mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition ${queued ? "border-emerald-500 bg-emerald-500" : "border-slate-300 bg-white hover:border-emerald-400"}`} onClick={() => togglePatternImputation(target, selectedKey)} role="checkbox" aria-checked={queued} aria-label={`Smart fill ${target} using ${selectedKey}`}>
                                     {queued && <svg viewBox="0 0 12 9" className="h-2.5 w-2.5 stroke-white fill-none" strokeWidth="2.5"><polyline points="1,5 4,8 11,1"/></svg>}
                                   </button>
                                   <div className="flex-1 min-w-0">
@@ -828,7 +856,13 @@ export function PrepareTab(props: PrepareTabProps) {
                                       <select
                                         className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 focus:border-emerald-400 focus:outline-none"
                                         value={selectedKey}
-                                        onChange={(e) => setSelectedSmartFillKey((prev) => ({ ...prev, [target]: e.target.value }))}
+                                        onChange={(e) => {
+                                          const nextKey = e.target.value;
+                                          setSelectedSmartFillKey((prev) => ({ ...prev, [target]: nextKey }));
+                                          // Keep the queued fix in step with the dropdown: queuing the new key
+                                          // replaces the old one (same "missing:<column>" concern).
+                                          if (queued) togglePatternImputation(target, nextKey);
+                                        }}
                                       >
                                         {options.map((o) => (
                                           <option key={o.key_column} value={o.key_column}>{o.key_column}</option>
@@ -900,7 +934,7 @@ export function PrepareTab(props: PrepareTabProps) {
                             return (
                               <div key={`out-${o.column}`} className="divide-y divide-slate-100">
                                 <div className="flex items-start gap-3 px-5 py-3.5">
-                                  <button type="button" className={`mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition ${nullifyQueued ? "border-amber-500 bg-amber-500" : "border-slate-300 bg-white hover:border-amber-400"}`} onClick={() => toggleNullifyOutliers(o.column)}>
+                                  <button type="button" className={`mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition ${nullifyQueued ? "border-amber-500 bg-amber-500" : "border-slate-300 bg-white hover:border-amber-400"}`} onClick={() => toggleNullifyOutliers(o.column)} role="checkbox" aria-checked={nullifyQueued} aria-label={`Convert outliers in ${o.column} to empty`}>
                                     {nullifyQueued && <svg viewBox="0 0 12 9" className="h-2.5 w-2.5 stroke-white fill-none" strokeWidth="2.5"><polyline points="1,5 4,8 11,1"/></svg>}
                                   </button>
                                   <div className="flex-1 min-w-0">
@@ -913,7 +947,7 @@ export function PrepareTab(props: PrepareTabProps) {
                                   <span className="shrink-0 rounded-full bg-teal-100 px-2.5 py-0.5 text-xs font-semibold text-teal-700">Stat. Outlier</span>
                                 </div>
                                 <div className="flex items-start gap-3 px-5 py-3 bg-slate-50/60">
-                                  <button type="button" className={`mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition ${removeQueued ? "border-amber-500 bg-amber-500" : "border-slate-300 bg-white hover:border-amber-400"}`} onClick={() => toggleRemoveOutliers(o.column)}>
+                                  <button type="button" className={`mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition ${removeQueued ? "border-amber-500 bg-amber-500" : "border-slate-300 bg-white hover:border-amber-400"}`} onClick={() => toggleRemoveOutliers(o.column)} role="checkbox" aria-checked={removeQueued} aria-label={`Drop rows with outliers in ${o.column}`}>
                                     {removeQueued && <svg viewBox="0 0 12 9" className="h-2.5 w-2.5 stroke-white fill-none" strokeWidth="2.5"><polyline points="1,5 4,8 11,1"/></svg>}
                                   </button>
                                   <div className="flex-1 min-w-0">
@@ -968,12 +1002,12 @@ export function PrepareTab(props: PrepareTabProps) {
                               : [];
                             return (
                               <div key={col} className="flex items-start gap-3 px-5 py-3.5">
-                                <button type="button" className={`mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition ${queued ? "border-indigo-600 bg-indigo-600" : "border-slate-300 bg-white hover:border-indigo-400"}`} onClick={() => toggleConvertType(col, target)}>
+                                <button type="button" className={`mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition ${queued ? "border-indigo-600 bg-indigo-600" : "border-slate-300 bg-white hover:border-indigo-400"}`} onClick={() => toggleConvertType(col, target)} role="checkbox" aria-checked={queued} aria-label={`Convert ${col} from text to ${target}`}>
                                   {queued && <svg viewBox="0 0 12 9" className="h-2.5 w-2.5 stroke-white fill-none" strokeWidth="2.5"><polyline points="1,5 4,8 11,1"/></svg>}
                                 </button>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm font-semibold text-slate-950">Convert <span className="text-indigo-600">&quot;{col}&quot;</span> from text → {target}</p>
-                                  <p className="text-xs text-slate-500 mt-0.5">This column contains {target} values stored as text. AI is confident this is a mistake.</p>
+                                  <p className="text-xs text-slate-500 mt-0.5">This column contains {target} values stored as text, so it can&apos;t be used in calculations yet.</p>
                                   {invalidSamples.length > 0 && (
                                     <p className="mt-0.5 text-xs text-amber-700">
                                       Non-{target === "numeric" ? "numeric" : "date"} value{invalidSamples.length > 1 ? "s" : ""}: {invalidSamples.map((v) => `"${v}"`).join(", ")}
@@ -994,7 +1028,7 @@ export function PrepareTab(props: PrepareTabProps) {
                             return (
                               <div key={col} className="px-5 py-3.5">
                                 <div className="flex items-start gap-3">
-                                  <button type="button" className={`mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition ${queued ? "border-indigo-600 bg-indigo-600" : "border-slate-300 bg-white hover:border-indigo-400"}`} onClick={() => toggleStandardizeDates(col)}>
+                                  <button type="button" className={`mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition ${queued ? "border-indigo-600 bg-indigo-600" : "border-slate-300 bg-white hover:border-indigo-400"}`} onClick={() => toggleStandardizeDates(col)} role="checkbox" aria-checked={queued} aria-label={`Standardize dates in ${col}`}>
                                     {queued && <svg viewBox="0 0 12 9" className="h-2.5 w-2.5 stroke-white fill-none" strokeWidth="2.5"><polyline points="1,5 4,8 11,1"/></svg>}
                                   </button>
                                   <div className="flex-1 min-w-0">
@@ -1029,7 +1063,7 @@ export function PrepareTab(props: PrepareTabProps) {
                             return (
                               <div key={`cat-${sug.column}`} className="px-5 py-3.5">
                                 <div className="flex items-start gap-3">
-                                  <button type="button" className={`mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition ${queued ? "border-indigo-600 bg-indigo-600" : "border-slate-300 bg-white hover:border-indigo-400"}`} onClick={() => toggleStandardizeCategories(sug.column, mapping)}>
+                                  <button type="button" className={`mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition ${queued ? "border-indigo-600 bg-indigo-600" : "border-slate-300 bg-white hover:border-indigo-400"}`} onClick={() => toggleStandardizeCategories(sug.column, mapping)} role="checkbox" aria-checked={queued} aria-label={`Fix inconsistent values in ${sug.column}`}>
                                     {queued && <svg viewBox="0 0 12 9" className="h-2.5 w-2.5 stroke-white fill-none" strokeWidth="2.5"><polyline points="1,5 4,8 11,1"/></svg>}
                                   </button>
                                   <div className="flex-1 min-w-0">
@@ -1074,7 +1108,7 @@ export function PrepareTab(props: PrepareTabProps) {
                     {textCleanupOpen && (
                       <div className="divide-y divide-slate-100">
                         <div className="flex items-start gap-3 px-5 py-3.5">
-                          <button type="button" disabled={textColumns.length === 0} className={`mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition disabled:opacity-40 ${trimQueued ? "border-indigo-600 bg-indigo-600" : "border-slate-300 bg-white hover:border-indigo-400"}`} onClick={toggleTrimWhitespace}>
+                          <button type="button" disabled={textColumns.length === 0} className={`mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition disabled:opacity-40 ${trimQueued ? "border-indigo-600 bg-indigo-600" : "border-slate-300 bg-white hover:border-indigo-400"}`} onClick={toggleTrimWhitespace} role="checkbox" aria-checked={trimQueued} aria-label="Trim whitespace in all text columns">
                             {trimQueued && <svg viewBox="0 0 12 9" className="h-2.5 w-2.5 stroke-white fill-none" strokeWidth="2.5"><polyline points="1,5 4,8 11,1"/></svg>}
                           </button>
                           <div className="flex-1 min-w-0">
@@ -1086,7 +1120,7 @@ export function PrepareTab(props: PrepareTabProps) {
                           const queued = hasQueuedOperation({ operation_type: "lowercase_column", columns: [col], column: col, target_type: null, drop_all_missing: true, errors: "coerce" });
                           return (
                             <div key={col} className="flex items-start gap-3 px-5 py-3.5">
-                              <button type="button" className={`mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition ${queued ? "border-indigo-600 bg-indigo-600" : "border-slate-300 bg-white hover:border-indigo-400"}`} onClick={() => toggleLowercaseColumn(col)}>
+                              <button type="button" className={`mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition ${queued ? "border-indigo-600 bg-indigo-600" : "border-slate-300 bg-white hover:border-indigo-400"}`} onClick={() => toggleLowercaseColumn(col)} role="checkbox" aria-checked={queued} aria-label={`Lowercase ${col}`}>
                                 {queued && <svg viewBox="0 0 12 9" className="h-2.5 w-2.5 stroke-white fill-none" strokeWidth="2.5"><polyline points="1,5 4,8 11,1"/></svg>}
                               </button>
                               <div className="flex-1 min-w-0">
