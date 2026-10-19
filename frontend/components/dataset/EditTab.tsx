@@ -96,6 +96,8 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
   const [pendingDraft, setPendingDraft] = useState<EditDraft | null>(null);
   const [draftChecked, setDraftChecked] = useState(false);
   const draftWarned = useRef(false);
+  // Latest draft not yet written by the debounce, flushed if the page or tab goes away first.
+  const unsavedDraft = useRef<EditDraft | null>(null);
 
   // ── Undo / redo ──────────────────────────────────────────────────────────
   const [undoStack, setUndoStack] = useState<EditOperation[]>([]);
@@ -195,29 +197,49 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
 
   // ── Autosave the draft while there are unsaved edits ─────────────────────
   // Paused until the user decides what to do with a found draft, so it isn't overwritten.
+  const storeDraft = useCallback((draft: EditDraft) => {
+    unsavedDraft.current = null;
+    if (!writeEditDraft(datasetId, draft) && !draftWarned.current) {
+      draftWarned.current = true;
+      toast.warning("These edits are too large to keep as a backup in your browser. Save before leaving the page.");
+    }
+  }, [datasetId]);
+
   useEffect(() => {
-    if (loadingRows || !draftChecked || pendingDraft) return;
+    if (loadingRows || !draftChecked || pendingDraft) {
+      unsavedDraft.current = null;
+      return;
+    }
     if (!isDirty) {
+      unsavedDraft.current = null;
       removeEditDraft(datasetId);
       return;
     }
-    const timer = setTimeout(() => {
-      const stored = writeEditDraft(datasetId, {
-        baseVersionId,
-        savedAt: new Date().toISOString(),
-        editedCells: [...editedCells.entries()],
-        deletedRows: [...deletedRows],
-        insertedRows: [...insertedRows.entries()],
-        columns,
-        columnRenames: [...columnRenames.current.entries()],
-      });
-      if (!stored && !draftWarned.current) {
-        draftWarned.current = true;
-        toast.warning("These edits are too large to keep as a backup in your browser. Save before leaving the page.");
-      }
-    }, 500);
+    const draft: EditDraft = {
+      baseVersionId,
+      savedAt: new Date().toISOString(),
+      editedCells: [...editedCells.entries()],
+      deletedRows: [...deletedRows],
+      insertedRows: [...insertedRows.entries()],
+      columns,
+      columnRenames: [...columnRenames.current.entries()],
+    };
+    unsavedDraft.current = draft;
+    const timer = setTimeout(() => storeDraft(draft), 500);
     return () => clearTimeout(timer);
-  }, [loadingRows, draftChecked, pendingDraft, isDirty, datasetId, baseVersionId, editedCells, deletedRows, insertedRows, columns]);
+  }, [loadingRows, draftChecked, pendingDraft, isDirty, datasetId, baseVersionId, editedCells, deletedRows, insertedRows, columns, storeDraft]);
+
+  // Don't lose the last half-second of edits to a refresh, a closed tab, or leaving the Edit tab.
+  useEffect(() => {
+    function flush() {
+      if (unsavedDraft.current) storeDraft(unsavedDraft.current);
+    }
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [storeDraft]);
 
   function handleRestoreDraft() {
     if (!pendingDraft) return;
@@ -530,7 +552,8 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
 
   // ── Add / delete rows ────────────────────────────────────────────────────
   function handleAddRow() {
-    const newIndex = rows.length + insertedRows.size;
+    // Next unused index: rows.length + size would reuse a key after an inserted row is undone.
+    const newIndex = Math.max(rows.length - 1, ...insertedRows.keys()) + 1;
     const blank: Row = {};
     columns.forEach((c) => { blank[c] = null; });
     setInsertedRows((m) => new Map([...m, [newIndex, blank]]));
@@ -620,11 +643,12 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
         });
         records.push(merged);
       });
-      insertedRows.forEach((row) => {
+      insertedRows.forEach((row, idx) => {
+        if (deletedRows.has(idx)) return;
         const merged: Row = { ...row };
         columns.forEach((col) => {
-          const baseKey = `${rows.length + records.length - (rows.length - deletedRows.size)}::${col}`;
-          if (editedCells.has(baseKey)) merged[col] = editedCells.get(baseKey);
+          const key = `${idx}::${col}`;
+          if (editedCells.has(key)) merged[col] = editedCells.get(key);
         });
         records.push(merged);
       });
@@ -677,7 +701,7 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
         const key = `${idx}::${col}`;
         if (editedCells.has(key)) merged[col] = editedCells.get(key);
       });
-      result.push({ realIndex: idx, isInserted: true, isDeleted: false, data: merged });
+      result.push({ realIndex: idx, isInserted: true, isDeleted: deletedRows.has(idx), data: merged });
     });
 
     // Apply search filter
@@ -778,7 +802,7 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <span>
             <span className="font-semibold">You have unsaved edits from {new Date(pendingDraft.savedAt).toLocaleString()}.</span>{" "}
-            Bring them back? (Undo history starts fresh.)
+            Restore them or discard them to continue editing. (Undo history starts fresh.)
           </span>
           <div className="ml-auto flex gap-2">
             <button
@@ -816,6 +840,8 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
         loading={suggestionsLoading}
       />
 
+      {/* Locked until the user restores or discards a found draft, so new edits can't be silently replaced. */}
+      <div inert={pendingDraft !== null} className={`space-y-3 ${pendingDraft ? "opacity-50" : ""}`}>
       <IssuesPanel
         issues={allIssues}
         missingValuesPerCol={missingValuesPerCol}
@@ -1037,6 +1063,7 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
             {debouncedSearch ? "No rows match your search." : "No rows in this dataset."}
           </div>
         )}
+      </div>
       </div>
 
       {/* Footer summary */}

@@ -223,6 +223,34 @@ def test_smart_fill_skips_inconsistent_relationship():
     assert _city_zip_suggestion(frame) is None
 
 
+def test_smart_fill_works_on_small_dataset_with_mostly_unique_cities():
+    # 20 rows, 12 distinct cities: 4 repeat (2 known zips + 1 missing each), 8 appear once.
+    rows = []
+    for i, city in enumerate(["Panabo", "Tagum", "Davao", "Samal"]):
+        zip_code = 8100.0 + i
+        rows += [{"City": city, "Zip Code": zip_code}] * 2 + [{"City": city, "Zip Code": None}]
+    rows += [{"City": f"Town{i}", "Zip Code": 9000.0 + i} for i in range(8)]
+    assert _city_zip_suggestion(pd.DataFrame(rows)) is not None
+
+
+def test_smart_fill_ignores_near_constant_target():
+    # Country is "PH" almost everywhere, whatever the City: City adds no information.
+    frame = pd.DataFrame({
+        "City": ["Panabo"] * 10 + ["Tagum"] * 10 + ["Davao"] * 10,
+        "Country": ["PH"] * 8 + ["US", None] + ["PH"] * 9 + [None] + ["PH"] * 9 + [None],
+    })
+    assert not [s for s in find_pattern_suggestions(frame, ["Country"]) if s.key_column == "City"]
+
+
+def test_smart_fill_needs_two_cities_with_evidence():
+    # Only Panabo has known zips (2 of them); Tagum is all missing. Too little to call a pattern.
+    frame = pd.DataFrame({
+        "City": ["Panabo"] * 3 + ["Tagum"] * 3,
+        "Zip Code": [8105.0, 8105.0, None, None, None, None],
+    })
+    assert _city_zip_suggestion(frame) is None
+
+
 def test_smart_fill_keeps_rows_with_blank_key_untouched():
     frame = _city_zip(known_per_city=3, missing_per_city=2)
     frame.loc[len(frame)] = {"City": None, "Zip Code": None}

@@ -44,7 +44,7 @@
 | Fill missing — median | ✅ | |
 | Fill missing — mode | ✅ | |
 | Fill missing — custom value | ✅ | |
-| Smart fill (fill from a related column) | ✅ | e.g. City "Panabo" → Zip Code 8105. Suggested when ≥80% of known values agree with their group's usual value; city names matched ignoring case/extra spaces; works even when most values are missing; ignores ID-like columns |
+| Smart fill (fill from a related column) | ✅ | e.g. City "Panabo" → Zip Code 8105. Suggested when ≥80% of known values agree with their group's usual value (measured over cities with ≥2 known values, at least 2 such cities) and the city genuinely improves the guess (Goodman–Kruskal λ ≥ 0.5, so near-constant columns aren't "patterns"); city names matched ignoring case/extra spaces; works when most values are missing and on small datasets; ignores ID-like columns |
 | Drop rows with nulls | ✅ | |
 | Drop column | ✅ | |
 | Remove duplicates | ✅ | |

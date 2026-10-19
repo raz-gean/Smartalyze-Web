@@ -6,14 +6,17 @@ from app.schemas.cleaning import PatternImputationGroup, PatternImputationResult
 
 # Share of known target values that must agree with their group's usual value.
 _MIN_CONFIDENCE = 0.8
+# Goodman-Kruskal lambda: how much knowing the key reduces wrong guesses compared with
+# always guessing the target's single most common value. Rejects "patterns" that are
+# just a near-constant column (e.g. Country is 90% "PH" whatever the City is).
+_MIN_LAMBDA = 0.5
 _LOW_SAMPLE_THRESHOLD = 5
-# Evidence guard: without it, a key where every value is unique (an ID column)
-# would look "100% consistent" because each group has a single known value.
-# Together with "at least 2 distinct keys" this means at least 4 known values.
-_MIN_AVG_SUPPORT_PER_GROUP = 2.0
-# A key column must repeat its values to describe a relationship: at most this
-# share of its non-null rows may be distinct values, capped for speed.
-_MAX_KEY_DISTINCT_RATIO = 0.5
+# Agreement can only be measured in a group with at least 2 known values, and a
+# relationship needs at least 2 such groups (so at least 4 known values in total).
+# A key where every value is unique (an ID column) never qualifies.
+_MIN_GROUP_SUPPORT = 2
+_MIN_MEASURABLE_GROUPS = 2
+# Speed cap on how many distinct key values are analysed.
 _MAX_KEY_DISTINCT = 1000
 
 
@@ -40,37 +43,34 @@ def _normalized_key(series: pd.Series) -> pd.Series:
     return pd.Series([normalize(v) for v in series], index=series.index, dtype=object)
 
 
-def _key_cardinality_ok(series: pd.Series) -> bool:
-    key = _normalized_key(series).dropna()
-    distinct = key.nunique()
-    return 2 <= distinct <= min(_MAX_KEY_DISTINCT, len(key) * _MAX_KEY_DISTINCT_RATIO)
-
-
 def _analyze_pair(
     df: pd.DataFrame,
     key_col: str,
     target_col: str,
+    key: pd.Series,
 ) -> PatternImputationResult | None:
     """
     Analyse the relationship between a categorical key column and a target column
-    that has missing values (e.g. City -> Zip Code). Returns None when the pattern
-    is too weak or there is too little evidence.
+    that has missing values (e.g. City -> Zip Code). `key` is the normalized key_col.
+    Returns None when the pattern is too weak or there is too little evidence.
 
     - per-group coverage    = support_count / total_in_group (informational only)
     - per-group consistency = consistency_count / support_count
-    - weighted_confidence   = all known values agreeing with their group's usual value
-                              / all known values (support-weighted consistency)
+    - weighted_confidence   = known values agreeing with their group's usual value
+                              / all known values, over groups with >= 2 known values
 
     How many values are missing is not evidence against the pattern, so coverage
-    does not gate the suggestion; it is the case where filling helps most.
+    does not gate the suggestion; it is the case where filling helps most. Groups
+    with a single known value still get filled but are listed in low_sample_groups.
     """
     groups: list[PatternImputationGroup] = []
     low_sample_groups: list[str] = []
-    total_support = 0
-    total_consistent = 0
+    measured_support = 0
+    measured_consistent = 0
+    measured_known: list[pd.Series] = []
     groups_with_fill = 0
 
-    for _, group_df in df.groupby(_normalized_key(df[key_col]), dropna=True):
+    for _, group_df in df.groupby(key, dropna=True):
         known = group_df[target_col].dropna()
         missing_mask = group_df[target_col].isna()
         fillable_count = int(missing_mask.sum())
@@ -123,18 +123,26 @@ def _analyze_pair(
                 explanation=explanation,
             )
         )
-        total_support += support_count
-        total_consistent += consistency_count
         if fillable_count > 0:
             groups_with_fill += 1
+        if support_count >= _MIN_GROUP_SUPPORT:
+            measured_support += support_count
+            measured_consistent += consistency_count
+            measured_known.append(known)
 
-    if not groups or groups_with_fill == 0:
-        return None
-    if total_support / len(groups) < _MIN_AVG_SUPPORT_PER_GROUP:
+    if groups_with_fill == 0 or len(measured_known) < _MIN_MEASURABLE_GROUPS:
         return None
 
-    weighted_confidence = round(total_consistent / total_support, 4)
+    weighted_confidence = round(measured_consistent / measured_support, 4)
     if weighted_confidence < _MIN_CONFIDENCE:
+        return None
+
+    # Lambda compares the per-group guesses with one global guess on the same values.
+    global_hits = int(pd.concat(measured_known).value_counts().iloc[0])
+    if global_hits == measured_support:
+        return None  # every known value is identical: the key adds nothing
+    lam = (measured_consistent - global_hits) / (measured_support - global_hits)
+    if lam < _MIN_LAMBDA:
         return None
 
     return PatternImputationResult(
@@ -154,21 +162,29 @@ def find_pattern_suggestions(df: pd.DataFrame, missing_cols: list[str]) -> list[
     if df.empty or not missing_cols:
         return []
 
-    categorical_cols = [c for c in df.columns if _is_categorical(df[c]) and _key_cardinality_ok(df[c])]
+    # Normalize each candidate key once; it is reused for every target column.
+    keys: dict[str, pd.Series] = {}
+    for col in df.columns:
+        if not _is_categorical(df[col]):
+            continue
+        key = _normalized_key(df[col])
+        if 2 <= key.nunique(dropna=True) <= _MAX_KEY_DISTINCT:
+            keys[col] = key
+
     numeric_missing = [
         c for c in missing_cols
         if c in df.columns
         and (pd.api.types.is_numeric_dtype(df[c]) or pd.api.types.is_string_dtype(df[c]) or df[c].dtype == object)
     ]
 
-    if not categorical_cols or not numeric_missing:
+    if not keys or not numeric_missing:
         return []
 
     results: list[PatternImputationResult] = []
     seen: set[str] = set()
 
     for target_col in numeric_missing:
-        for key_col in categorical_cols:
+        for key_col, key in keys.items():
             if key_col == target_col:
                 continue
             pair_key = f"{key_col}→{target_col}"
@@ -176,7 +192,7 @@ def find_pattern_suggestions(df: pd.DataFrame, missing_cols: list[str]) -> list[
                 continue
             seen.add(pair_key)
 
-            result = _analyze_pair(df, key_col, target_col)
+            result = _analyze_pair(df, key_col, target_col, key)
             if result is not None:
                 results.append(result)
 
