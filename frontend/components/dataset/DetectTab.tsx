@@ -11,8 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import { useState } from "react";
-import type { AIAnalyzeContext, AnomalyResponse, CorrelationMethod, CorrelationResponse } from "@/lib/api";
-import { AIInsightPanel } from "@/components/dataset/AIInsightPanel";
+import type { AnomalyResponse, CorrelationMethod, CorrelationResponse } from "@/lib/api";
 
 type DetectSubTab = "anomaly" | "correlation";
 
@@ -24,8 +23,6 @@ export interface DetectTabProps {
   correlationMethod: CorrelationMethod;
   setCorrelationMethod: (method: CorrelationMethod) => void;
   onSwitchTab?: (tab: "prepare" | "explore" | "detect" | "predict") => void;
-  aiContext: AIAnalyzeContext | null;
-  token: string;
 }
 
 function TipCard({ text }: { text: string }) {
@@ -53,8 +50,6 @@ export function DetectTab(props: DetectTabProps) {
     correlationMethod,
     setCorrelationMethod,
     onSwitchTab,
-    aiContext,
-    token,
   } = props;
 
   const [subTab, setSubTab] = useState<DetectSubTab>("anomaly");
@@ -411,11 +406,6 @@ export function DetectTab(props: DetectTabProps) {
 
   return (
     <div className="space-y-6">
-      <AIInsightPanel
-        context={aiContext}
-        token={token}
-        contextKey={aiContext?.dataset_name ?? ""}
-      />
 
       {/* Guided workflow hint */}
       <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-4">

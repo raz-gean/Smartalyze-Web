@@ -21,6 +21,8 @@ Provider config (set in .env):
 """
 
 import os
+import re
+
 import httpx
 
 from app.schemas.ai import AIContext, AIChatMessage, AIAnalyzeContext
@@ -33,17 +35,48 @@ _GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 _GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 _GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 
+# Shared rules so answers match the real app and the real data (no invented buttons,
+# currencies or statistics). Kept in one place for both the cleaning and analysis prompts.
+_APP_FACTS = (
+    "Smartalyze has six tabs: Overview, Prepare, Explore, Detect, Predict, Edit. "
+    "The only cleaning actions it offers (in Prepare) are: Remove duplicate rows; "
+    "Fill empty cells (average, median, most common value, or drop the rows); "
+    "Smart fill (fills a column from a related column, e.g. Zip Code from City); "
+    "Fix inconsistent values (merges spelling variants like 'panabo' and 'Panabo'); "
+    "Convert disguised blanks (e.g. 'N/A' to empty); Convert column type (to numbers or dates); "
+    "Standardize dates; Trim whitespace; Lowercase; and, under 'Potential outliers' for a column, "
+    "two options: convert the outliers to empty, or drop the rows that contain them. "
+    "Recommend only these actions, by these names. Never invent other buttons, menus or "
+    "group-wise fills (for example 'median per city' does not exist)."
+)
+_ACCURACY_RULES = (
+    "Use only the columns and numbers given in the context; never invent values, columns or examples. "
+    "Recommend an action only for a problem the context actually lists (for example, suggest "
+    "Convert disguised blanks only if disguised blanks are listed). Call an outlier 'unusual' or "
+    "'worth checking', not an error, unless the context says so. "
+    "Never add currency symbols or units the data does not show. "
+    "Outliers are found with the IQR rule: a value is an outlier if it is below Q1 - 1.5 x IQR "
+    "or above Q3 + 1.5 x IQR (the 'fence'). Never describe the fence as containing a percentage of the data."
+)
+_FORMAT_RULES = (
+    "Format: short paragraphs or numbered steps. Use **bold** only for action names; no other "
+    "markdown (no *italics*, tables, headings or emoji). Avoid statistical jargon such as "
+    "'central tendency'; say it in everyday words."
+)
+
 _SYSTEM_PROMPT = (
     "You are a data analysis assistant for Smartalyze, a data cleaning and analysis tool. "
     "Help non-technical users understand their dataset issues and guide them through cleaning. "
     "Be concise (under 200 words). Use numbered steps when giving a cleaning plan. "
     "Speak plainly — explain any technical term you use. "
-    "Give direct, actionable advice. Do not ask follow-up questions."
+    "Give direct, actionable advice. Do not ask follow-up questions. "
+    f"{_APP_FACTS} {_ACCURACY_RULES} {_FORMAT_RULES}"
 )
 
 
 def _build_context_text(ctx: AIContext) -> str:
-    lines: list[str] = [f'Dataset: "{ctx.dataset_name}"']
+    size = f" — {ctx.row_count} rows" if ctx.row_count is not None else ""
+    lines: list[str] = [f'Dataset: "{ctx.dataset_name}"{size}']
 
     if ctx.column_types:
         cols = ", ".join(f"{c} ({t})" for c, t in ctx.column_types.items())
@@ -98,19 +131,55 @@ async def _ollama_chat(messages: list[dict]) -> str:
             )
 
 
+def _build_chat_payload(model: str, messages: list[dict]) -> dict:
+    """Request body for an OpenAI-compatible chat completion (Groq, Gemini).
+
+    gpt-oss models are reasoning models: their hidden reasoning counts toward
+    max_tokens, so ask for low reasoning effort and leave room for the answer.
+    """
+    payload: dict = {"model": model, "messages": messages, "max_tokens": 1200}
+    if model.startswith("openai/gpt-oss"):
+        payload["reasoning_effort"] = "low"
+    return payload
+
+
+def _clean_answer(text: str) -> str:
+    """Safety net for rules the model occasionally ignores: no invented dollar signs."""
+    return re.sub(r"\$\s?(?=\d)", "", text)
+
+
+def _trim_to_last_sentence(text: str) -> str:
+    """Cut an answer that hit the length limit back to its last complete sentence."""
+    text = text.rstrip()
+    cut = max(text.rfind(". "), text.rfind(".\n"), text.rfind("!"), text.rfind("?"))
+    if text.endswith((".", "!", "?")):
+        return text
+    if cut > len(text) // 3:
+        return text[: cut + 1]
+    return text + "…"
+
+
 async def _openai_compatible_chat(base_url: str, api_key: str, model: str, messages: list[dict]) -> str:
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0)) as client:
         resp = await client.post(
             f"{base_url}/chat/completions",
             headers=headers,
-            json={"model": model, "messages": messages, "max_tokens": 512},
+            json=_build_chat_payload(model, messages),
         )
         resp.raise_for_status()
-        return str(resp.json()["choices"][0]["message"]["content"])
+        choice = resp.json()["choices"][0]
+        content = str(choice["message"].get("content") or "")
+        if choice.get("finish_reason") == "length":
+            content = _trim_to_last_sentence(content)
+        return content
 
 
 async def _chat(messages: list[dict]) -> str:
+    return _clean_answer(await _chat_with_provider(messages))
+
+
+async def _chat_with_provider(messages: list[dict]) -> str:
     if _PROVIDER == "ollama":
         return await _ollama_chat(messages)
     elif _PROVIDER == "groq":
@@ -162,7 +231,8 @@ _ANALYZE_SYSTEM_PROMPT = (
     "Highlight 2-3 of the most interesting findings: notable correlations, "
     "suspicious outlier rates, strong or weak trends, or columns worth investigating. "
     "Be concise (under 200 words). Define any statistical term you use in one phrase. "
-    "Do not suggest cleaning steps. Do not ask follow-up questions."
+    "Do not suggest cleaning steps. Do not ask follow-up questions. "
+    f"{_APP_FACTS} {_ACCURACY_RULES} {_FORMAT_RULES}"
 )
 
 
@@ -197,6 +267,19 @@ def _build_analyze_context_text(ctx: AIAnalyzeContext) -> str:
         for p in ctx.top_correlations[:5]:
             direction = "positive" if p.r >= 0 else "negative"
             lines.append(f"  {p.col_a} vs {p.col_b}: r={p.r:.2f} ({direction})")
+    # Each tab sends only its own results. An empty section means "not part of this view",
+    # never "none found" -- say so, or the model reports e.g. "no outliers" on Explore.
+    missing = [
+        label for label, present in (
+            ("column statistics", ctx.column_stats), ("trends", ctx.trends),
+            ("outliers", ctx.anomalies), ("correlations", ctx.top_correlations),
+        ) if not present
+    ]
+    if missing:
+        lines.append(
+            f"Not included in this view: {', '.join(missing)}. Do not say whether there are any; "
+            "other tabs (Explore for statistics and trends, Detect for outliers and correlations) cover them."
+        )
     return "\n".join(lines)
 
 

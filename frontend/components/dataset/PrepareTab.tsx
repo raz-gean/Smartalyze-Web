@@ -16,7 +16,6 @@ import {
   UnparseableDateRow,
 } from "@/lib/api";
 import { orderColumns } from "@/lib/columnOrder";
-import { AIAdvisorPanel } from "@/components/dataset/AIAdvisorPanel";
 
 type MissingStrategy = "fill_mean" | "fill_median" | "fill_mode" | "drop_rows";
 type PrepareSubTab = "overview" | "cleaning";
@@ -242,7 +241,6 @@ function InsightCard({ text }: { text: string }) {
 
 export type PrepareTabProps = {
   workspace: DatasetWorkspace;
-  token: string | null;
   subTab: PrepareSubTab;
   setSubTab: (t: PrepareSubTab) => void;
   cleaningDetection: CleanDetectResponse | null;
@@ -323,7 +321,7 @@ export type PrepareTabProps = {
 
 export function PrepareTab(props: PrepareTabProps) {
   const {
-    workspace, token, subTab, setSubTab,
+    workspace, subTab, setSubTab,
     cleaningDetection, cleaningDetecting, cleaningResult, cleaningOperations, setCleaningOperations,
     missingValueStrategies, setMissingValueStrategies,
     dateFormatChoices, setDateFormatChoices,
@@ -710,8 +708,8 @@ export function PrepareTab(props: PrepareTabProps) {
             </div>
           ) : (
             <>
-              <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
-                {/* LEFT: Fix checklist */}
+              <div className="grid gap-6">
+                {/* Fix checklist (the AI assistant is the shared Ask AI panel in the workspace page) */}
                 <div className="space-y-3">
 
                   {/* AI Summary Strip */}
@@ -1239,17 +1237,6 @@ export function PrepareTab(props: PrepareTabProps) {
                     </button>
                   </div>
 
-                </div>{/* /LEFT */}
-
-                {/* RIGHT: AI sidebar */}
-                <div className="xl:sticky xl:top-20 h-fit">
-                  {cleaningDetection && token && (
-                    <AIAdvisorPanel
-                      detectResult={cleaningDetection}
-                      dataset={workspace.dataset}
-                      token={token}
-                    />
-                  )}
                 </div>
               </div>
 

@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 class AIContext(BaseModel):
     dataset_name: str
+    row_count: int | None = None
     column_types: dict[str, str] = {}
     missing_values: dict[str, int] = {}
     duplicates: int = 0

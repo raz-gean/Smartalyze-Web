@@ -881,6 +881,7 @@ export function uploadDataset(
 
 export type AIContext = {
   dataset_name: string;
+  row_count?: number | null;
   column_types: Record<string, string>;
   missing_values: Record<string, number>;
   duplicates: number;

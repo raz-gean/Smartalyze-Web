@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import {
   AIAnalyzeContext,
+  AIChatMessage,
+  AIContext,
   analyzeStats,
   AnalyzeStatsResponse,
   AnomalyResponse,
@@ -28,6 +30,8 @@ import {
   FilterPredicate,
   filterDatasetRows,
   FilterResponse,
+  getAIInsight,
+  getAISuggestion,
   getAnomalies,
   getCorrelation,
   getDatasetRows,
@@ -42,6 +46,8 @@ import {
   PredictResponse,
   restoreDatasetVersion,
   saveDatasetResult,
+  sendAIAnalyzeChat,
+  sendAIChat,
   StructureSummaryResponse,
   TrendResponse,
   uploadDataset,
@@ -56,6 +62,15 @@ import { DetectTab } from "@/components/dataset/DetectTab";
 import { PredictTab } from "@/components/dataset/PredictTab";
 import { EditTab } from "@/components/dataset/EditTab";
 import { TabErrorBoundary } from "@/components/TabErrorBoundary";
+import { AskAIPanel, type AISummaryState } from "@/components/dataset/AskAIPanel";
+
+const AI_PANEL_KEY = "smartalyze:ai-panel-open";
+type AITopic = "cleaning" | "analysis" | "detect";
+const AI_TOPIC_COPY: Record<AITopic, { title: string; waiting: string }> = {
+  cleaning: { title: "Cleaning plan", waiting: "Scanning your data for problems…" },
+  analysis: { title: "What your data shows", waiting: "Loading the column statistics and trends…" },
+  detect: { title: "Outliers & relationships", waiting: "Loading the outlier and correlation results…" },
+};
 
 type WorkspaceTab = "overview" | "prepare" | "explore" | "detect" | "predict" | "edit";
 type PrepareSubTab = "overview" | "cleaning";
@@ -298,8 +313,10 @@ export default function DatasetWorkspacePage() {
   const availableColumns = workspace?.dataset.columns_json?.map((c) => String(c.name ?? "")).filter(Boolean) ?? [];
   const cleaningIssues = cleaningDetection?.issues ?? [];
 
+  // AI contexts are built only once ALL of a tab's results have loaded, so the AI never
+  // summarizes half the picture (e.g. correlations without the outliers).
   const exploreAIContext: AIAnalyzeContext | null =
-    analysisStats && workspace
+    analysisStats && trendData && workspace
       ? {
           dataset_name: workspace.dataset.original_filename ?? "dataset",
           row_count: analysisStats.row_count,
@@ -325,7 +342,7 @@ export default function DatasetWorkspacePage() {
       : null;
 
   const detectAIContext: AIAnalyzeContext | null =
-    (anomalyData ?? correlationData) && workspace
+    anomalyData && correlationData && workspace
       ? {
           dataset_name: workspace.dataset.original_filename ?? "dataset",
           row_count: workspace.dataset.row_count ?? 0,
@@ -352,6 +369,97 @@ export default function DatasetWorkspacePage() {
           })(),
         }
       : null;
+
+  const cleaningAIContext: AIContext | null =
+    cleaningDetection && workspace
+      ? {
+          dataset_name: workspace.dataset.original_filename ?? "dataset",
+          row_count: Number(cleaningResult?.summary?.row_count ?? workspace.dataset.row_count ?? 0) || null,
+          column_types: cleaningDetection.column_types ?? {},
+          missing_values: cleaningDetection.missing_values ?? {},
+          duplicates: cleaningDetection.duplicates ?? 0,
+          issues: (cleaningDetection.issues as unknown as Array<Record<string, unknown>>) ?? [],
+          pattern_suggestions: (cleaningDetection.pattern_suggestions as unknown as Array<Record<string, unknown>>) ?? [],
+          outliers: (cleaningDetection.outliers as unknown as Array<Record<string, unknown>>) ?? [],
+        }
+      : null;
+
+  // ── Ask AI: one panel shared by every tab ───────────────────────────────────
+  // Summaries are cached by topic + the exact context sent, so switching tabs never asks
+  // the AI again; a new summary is made only when the data changes or on Regenerate.
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiSummaries, setAiSummaries] = useState<Record<string, AISummaryState>>({});
+  const [aiChat, setAiChat] = useState<AIChatMessage[]>([]);
+  const [aiChatLoading, setAiChatLoading] = useState(false);
+  const [aiChatError, setAiChatError] = useState<string | null>(null);
+  const aiInFlight = useRef(new Set<string>());
+
+  const aiTopic: AITopic =
+    activeTab === "explore" || activeTab === "predict" ? "analysis" : activeTab === "detect" ? "detect" : "cleaning";
+  const aiTopicContext = aiTopic === "cleaning" ? cleaningAIContext : aiTopic === "analysis" ? exploreAIContext : detectAIContext;
+  const aiKey = aiTopicContext ? `${aiTopic}|${JSON.stringify(aiTopicContext)}` : null;
+
+  useEffect(() => {
+    // Open by default on wide screens; afterwards remember the user's choice.
+    let open = window.matchMedia("(min-width: 1280px)").matches;
+    try {
+      const saved = window.localStorage.getItem(AI_PANEL_KEY);
+      if (saved !== null) open = saved === "1";
+    } catch {
+      // storage unavailable: keep the default
+    }
+    setAiOpen(open);
+  }, []);
+
+  function setAiPanelOpen(open: boolean) {
+    setAiOpen(open);
+    try {
+      window.localStorage.setItem(AI_PANEL_KEY, open ? "1" : "0");
+    } catch {
+      // storage unavailable: the choice just isn't remembered
+    }
+  }
+
+  useEffect(() => {
+    if (!aiOpen || !token || !aiKey || !aiTopicContext) return;
+    if (aiSummaries[aiKey] || aiInFlight.current.has(aiKey)) return;
+    aiInFlight.current.add(aiKey);
+    setAiSummaries((s) => ({ ...s, [aiKey]: { status: "loading" } }));
+    const request = aiTopic === "cleaning"
+      ? getAISuggestion(aiTopicContext as AIContext, token).then((r) => r.suggestion)
+      : getAIInsight(aiTopicContext as AIAnalyzeContext, token).then((r) => r.insight);
+    request
+      .then((text) => setAiSummaries((s) => ({ ...s, [aiKey]: { status: "done", text } })))
+      .catch((e: unknown) => setAiSummaries((s) => ({ ...s, [aiKey]: { status: "error", error: e instanceof Error ? e.message : "" } })))
+      .finally(() => aiInFlight.current.delete(aiKey));
+  }, [aiOpen, token, aiKey, aiTopic, aiTopicContext, aiSummaries]);
+
+  function handleRegenerateAI() {
+    if (!aiKey) return;
+    setAiSummaries((s) => {
+      const next = { ...s };
+      delete next[aiKey];
+      return next;
+    });
+  }
+
+  async function handleAskAI(message: string) {
+    if (!token || !aiTopicContext) return;
+    const history = aiChat;
+    setAiChat([...history, { role: "user", content: message }]);
+    setAiChatLoading(true);
+    setAiChatError(null);
+    try {
+      const res = aiTopic === "cleaning"
+        ? await sendAIChat(aiTopicContext as AIContext, message, history, token)
+        : await sendAIAnalyzeChat(aiTopicContext as AIAnalyzeContext, message, history, token);
+      setAiChat((c) => [...c, { role: "assistant", content: res.reply }]);
+    } catch (e: unknown) {
+      setAiChatError(e instanceof Error ? e.message : "Could not get a reply.");
+    } finally {
+      setAiChatLoading(false);
+    }
+  }
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -396,8 +504,9 @@ export default function DatasetWorkspacePage() {
       .finally(() => setCleaningDetecting(false));
   }, [workspace, token, cleaningDetection, cleaningDetecting, cleaningScanFailed]);
 
+  // Column statistics and trends feed Explore, Predict's column list and the AI panel on both tabs.
   useEffect(() => {
-    if (activeTab !== "explore" || !workspace || !token || analysisStats) return;
+    if ((activeTab !== "explore" && activeTab !== "predict") || !workspace || !token || analysisStats) return;
     setAnalysisLoading(true);
     Promise.all([analyzeStats(workspace.dataset.id, token), getStructureSummary(workspace.dataset.id, token)])
       .then(([stats, structure]) => { setAnalysisStats(stats); setStructureSummary(structure); })
@@ -406,7 +515,7 @@ export default function DatasetWorkspacePage() {
   }, [activeTab, workspace, token, analysisStats]);
 
   useEffect(() => {
-    if (activeTab !== "explore" || !workspace || !token || trendData) return;
+    if ((activeTab !== "explore" && activeTab !== "predict") || !workspace || !token || trendData) return;
     setTrendLoading(true);
     getTrends(workspace.dataset.id, token)
       .then((data) => { setTrendData(data); if (data.columns[0]) setSelectedTrendColumn(data.columns[0].column); })
@@ -794,7 +903,7 @@ export default function DatasetWorkspacePage() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
-      <div className="mx-auto w-full max-w-7xl px-4 py-8">
+      <div className={`mx-auto w-full max-w-7xl px-4 py-8 ${aiOpen ? "xl:max-w-420" : ""}`}>
         {/* Page header */}
         <header className="mb-6 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
@@ -841,6 +950,15 @@ export default function DatasetWorkspacePage() {
               onClick={openHistory}
             >
               History
+            </button>
+            <button
+              type="button"
+              aria-pressed={aiOpen}
+              onClick={() => setAiPanelOpen(!aiOpen)}
+              className={`flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold transition ${aiOpen ? "border-indigo-300 bg-indigo-50 text-indigo-700" : "border-slate-200 bg-white text-indigo-700 hover:bg-indigo-50"}`}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+              Ask AI
             </button>
             <button
               type="button"
@@ -903,8 +1021,9 @@ export default function DatasetWorkspacePage() {
           })}
         </div>
 
-        {/* Tab content — full width */}
-        <div className="w-full">
+        {/* Tab content; on wide screens it leaves room for the docked Ask AI panel when open */}
+        <div className={`flex items-start gap-6 ${aiOpen ? "xl:pr-100" : ""}`}>
+        <div className="w-full min-w-0 flex-1">
           {activeTab === "overview" && workspace && (
             <TabErrorBoundary tabName="Overview">
               <OverviewTab
@@ -925,7 +1044,6 @@ export default function DatasetWorkspacePage() {
             <TabErrorBoundary tabName="Prepare">
             <PrepareTab
               workspace={workspace}
-              token={token}
               subTab={prepareSubTab}
               setSubTab={setPrepareSubTab}
               cleaningDetection={cleaningDetection}
@@ -1041,8 +1159,6 @@ export default function DatasetWorkspacePage() {
               handleGenerateAggregation={handleGenerateAggregation}
               handleExportGroupCSV={handleExportGroupCSV}
               handleSaveGroupAsDataset={handleSaveGroupAsDataset}
-              aiContext={exploreAIContext}
-              token={token ?? ""}
             />
             </TabErrorBoundary>
           )}
@@ -1057,8 +1173,6 @@ export default function DatasetWorkspacePage() {
               correlationMethod={correlationMethod}
               setCorrelationMethod={setCorrelationMethod}
               onSwitchTab={(tab) => setActiveTab(tab)}
-              aiContext={detectAIContext}
-              token={token ?? ""}
             />
             </TabErrorBoundary>
           )}
@@ -1103,6 +1217,22 @@ export default function DatasetWorkspacePage() {
             />
             </TabErrorBoundary>
           )}
+        </div>
+
+        {aiOpen && token && (
+          <AskAIPanel
+            onClose={() => setAiPanelOpen(false)}
+            summaryTitle={AI_TOPIC_COPY[aiTopic].title}
+            summary={aiKey ? aiSummaries[aiKey] ?? { status: "loading" } : null}
+            waitingHint={AI_TOPIC_COPY[aiTopic].waiting}
+            onRegenerate={handleRegenerateAI}
+            chat={aiChat}
+            chatLoading={aiChatLoading}
+            chatError={aiChatError}
+            canChat={aiTopicContext !== null}
+            onSend={(m) => void handleAskAI(m)}
+          />
+        )}
         </div>
       </div>
 

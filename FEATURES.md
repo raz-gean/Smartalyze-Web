@@ -147,6 +147,19 @@
 
 ---
 
+## AI Assistant (Ask AI)
+
+| Feature | Status | Notes |
+|---|---|---|
+| One Ask AI panel for the whole workspace | ✅ | Opened from the workspace header; docked on the right on wide screens, bottom sheet on small ones; remembers open/closed |
+| Summary per topic | ✅ | Cleaning plan (Overview, Prepare, Edit), What your data shows (Explore, Predict), Outliers & relationships (Detect) |
+| Generated once per data version | ✅ | Cached while the page is open; no new AI call on tab switches; refreshed after Apply / Save / Restore or with **Regenerate** |
+| Shared conversation | ✅ | Chat history kept across tabs |
+| Provider | ✅ | Groq (`openai/gpt-oss-120b`); Ollama and Gemini supported as alternatives |
+| Answer accuracy | ✅ | AI is told the real action names, the IQR rule, not to invent values/currency; cut-off answers trimmed to the last full sentence; only computed summaries are sent, never raw rows |
+
+---
+
 ## UX & Reliability
 
 | Feature | Status | Notes |

@@ -41,11 +41,11 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 | S3 | Trend analysis uses scikit-learn `LinearRegression` instead of NumPy `polyfit` (identical results) | p.67 says trends use scikit-learn; today only Predict does | ⬜ |
 | S4 | Edit tab "Suggested fixes" never appear: it reads `details.fill_value`, which the scan doesn't send, and matches issue kind `"outlier"` while the scan sends `"outliers"` (health panel says "No outliers" next to an outlier issue) | Visible bug | ⬜ |
 | S5 | Edit tab column badges show raw type names (`datetime_string`, `categorical`) | Jargon for non-technical users | ⬜ |
-| S6 | Predict's "Column to forecast" lists every column until the Explore tab has been opened once | Confusing list (default is correct) | ⬜ |
+| S6 | Predict's "Column to forecast" lists every column until the Explore tab has been opened once | Confusing list (default is correct) | ✅ Done (stats load on Predict too) |
 | S7 | History shows times 8 hours off (UTC shown as local time) | Visible bug | ⬜ |
 | S8 | File size shows "0 B" after an Edit save, or jumps after other saves | Visible bug | ⬜ |
 | S9 | Older failing test `test_analyze_quality_combined` (spelling-variant grouping on a mixed dataset) | Test suite is 52/53 | ⬜ |
-| S10 | AI answer quality (Groq): answers sometimes cut off (512-token limit with a reasoning model); markdown shows as raw `**`; AI names buttons Smartalyze doesn't have; adds `$` the data doesn't have; says IQR fences hold "about 95%" of data (wrong); first Detect summary can miss the outliers (context built before anomaly results arrive) | Visible in Ask AI / AI Analysis at the defense | ⬜ |
+| S10 | AI answer quality (Groq): answers sometimes cut off (512-token limit with a reasoning model); markdown shows as raw `**`; AI names buttons Smartalyze doesn't have; adds `$` the data doesn't have; says IQR fences hold "about 95%" of data (wrong); first Detect summary can miss the outliers (context built before anomaly results arrive) | Visible in Ask AI / AI Analysis at the defense | ✅ Done (Phase 1) |
 
 ---
 
@@ -83,6 +83,30 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 | D16 | References, p.83 | "Cited by: 76" and "Cited by: 12" still in entries [3] and [4] | Delete all "Cited by: XX". | ⬜ |
 | D17 | Background, pp.4–5; References [17], [18] | [17] (CHED TANAW) is cited for "AI-assisted functions"; [18] (DNSC BOT meeting) for "the College's computing and research environment" | Check that these sources really support those sentences. | ⬜ |
 | D18 | Whole document | Leftover yellow highlights (flagged in the previous version) | Check visually before printing; text extraction can't see highlights. | ⬜ |
+
+---
+
+## F. UI/UX redesign (decided October 21, 2026)
+
+**Goal:** a clean, simple workspace that is easier on the eyes, without changing *what* the system does. The six tabs (Overview, Prepare, Explore, Detect, Predict, Edit), feature names and workflows stay the same, so the use case diagram, DFD and functional requirements stay valid; only screenshots and the UI description in the manuscript change.
+
+**Process:** mockups first (light + dark) → team review → build → QA test → **UI freeze on November 1, 2026** (bug fixes only after that) → documentarian takes final screenshots and updates the manuscript once.
+
+| ID | Change | Decision and reasoning | Status |
+|---|---|---|---|
+| U1 | **Calm theme + dark mode** | Neutral grays with purple only for main actions (today's white-and-purple is too bright and busy). Light/dark switch that follows the computer's setting. Light stays available because printed manuscript screenshots and some users read better in light. All colors defined once as theme tokens; charts get their own dark-mode colors. | 🟡 Mockup |
+| U2 | **"How to use this page" help icon** in the workspace | Replaces the large guide cards at the top of each tab. A ⓘ button opens the steps on **click** (hover shows a label only; hover doesn't work on touch or for keyboard users). The guide opens by itself on a user's **first visit** to each tab, then stays behind the icon, so the "guided workflow for non-technical users" claim stays true. | 🟡 Mockup |
+| U3 | **AI generated once per dataset version** | AI summaries and chat history are kept while the dataset is open, instead of being regenerated on every tab switch (slower, uses up Groq's free limit, gives different answers each time). Regenerate only after Apply / Save / Restore or when the user clicks **Regenerate**. Also fixes the Detect summary that missed the outliers (S10). | ✅ Done (Phase 1) |
+| U4 | **One slide-in "Ask AI" panel** | A narrow (~380 px) panel from the right, the same on every tab, opened from the workspace header; replaces the wide horizontal chat boxes. Keeps its conversation across tabs (with U3). Bottom sheet on small screens. | ✅ Done (Phase 1) |
+| U5 | Order of work | 1) U3 + U4 together with the AI answer-quality fixes (S10); 2) U2; 3) U1 (largest, touches every screen). | — |
+
+**Document impact (after the UI freeze):**
+
+| ID | Where | Change | Status |
+|---|---|---|---|
+| D19 | All screenshots / user manual | Retake every screenshot after the UI freeze (light theme for print). | ⬜ |
+| D20 | NFR 4 Interaction Capability, p.49 | Add: "light and dark themes; help available on every workspace page; one AI assistant panel shared across tabs." | ⬜ |
+| D21 | AI sections (FR 7, FR 8, DFD 7.0) | Add that AI explanations are generated once per dataset version and refreshed when the data changes (fewer external requests). | ⬜ |
 
 ---
 
@@ -125,11 +149,11 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 | S3 | Trend analysis via scikit-learn | Sys | ⬜ |
 | S4 | Edit tab suggested fixes / outlier count | Sys | ⬜ |
 | S5 | Plain-language type badges | Sys | ⬜ |
-| S6 | Predict column list | Sys | ⬜ |
+| S6 | Predict column list | Sys | ✅ Done (stats load on Predict too) |
 | S7 | History time zone | Sys | ⬜ |
 | S8 | File size display | Sys | ⬜ |
 | S9 | Failing older test | Sys | ⬜ |
-| S10 | AI answer quality (Groq) | Sys | ⬜ |
+| S10 | AI answer quality (Groq) | Sys | ✅ Done (Phase 1) |
 | D1 | Scope: remove "predictive analysis" | Doc | ⬜ |
 | D2 | "Machine learning" wording for IQR | Doc | ⬜ |
 | D3 | "Encrypted" → "hashed" passwords | Doc | ⬜ |
@@ -148,3 +172,10 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 | D16 | Remove "Cited by" | Doc | ⬜ |
 | D17 | Check references [17], [18] | Doc | ⬜ |
 | D18 | Yellow highlights | Doc | ⬜ |
+| U1 | Calm theme + dark mode switch | Sys | 🟡 Mockup |
+| U2 | Help icon replaces guide cards | Sys | 🟡 Mockup |
+| U3 | AI generated once per dataset version | Sys | ✅ Done (Phase 1) |
+| U4 | Slide-in Ask AI panel | Sys | ✅ Done (Phase 1) |
+| D19 | Retake screenshots after UI freeze (Nov 1) | Doc | ⬜ |
+| D20 | NFR 4: themes, help, AI panel | Doc | ⬜ |
+| D21 | AI generated once per dataset version | Doc | ⬜ |
