@@ -15,3 +15,5 @@ Screenshots/
 .playwright-mcp
 .superpowers
 docs/superpowers
+# Office/WPS lock files created while a document is open
+~$*
