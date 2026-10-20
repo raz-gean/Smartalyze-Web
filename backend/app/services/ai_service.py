@@ -13,7 +13,7 @@ Provider config (set in .env):
 
     AI_PROVIDER=groq
     GROQ_API_KEY=gsk_...
-    GROQ_MODEL=llama-3.3-70b-versatile
+    GROQ_MODEL=openai/gpt-oss-120b      # Groq retired the Llama 3.3 models
 
     AI_PROVIDER=gemini
     GEMINI_API_KEY=...
@@ -29,7 +29,7 @@ _PROVIDER = os.getenv("AI_PROVIDER", "ollama").lower()
 _OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 _OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 _GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-_GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+_GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 _GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 _GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 
