@@ -24,9 +24,9 @@
 
 | Feature | Status | Notes |
 |---|---|---|
-| CSV upload | ✅ | pandas read_csv |
+| CSV upload | ✅ | pandas read_csv; codes with leading zeros (zip "08100", IDs) kept as text |
 | Excel upload (.xlsx / .xls) | ✅ | pandas read_excel |
-| JSON upload | ✅ | pandas read_json |
+| JSON upload | ✅ | pandas read_json; codes with leading zeros kept as text |
 | PNG/JPG image upload (OCR) | ✅ | EasyOCR + img2table, auto table extraction |
 | File type whitelist validation | ✅ | 400 error for unsupported extensions |
 | OCR model pre-warmed on startup | ✅ | Eliminates 20-30 s first-request delay |
@@ -87,7 +87,7 @@
 | Feature | Status | Notes |
 |---|---|---|
 | Linear regression forecast | ✅ | scikit-learn LinearRegression |
-| Date column (optional) | ✅ | Time-axis labeling |
+| Date column (optional) | ✅ | Only date-like columns offered (default: none = row order). Sorts by the real dates, steps forward by the data's typical spacing (e.g. monthly), labels each forecast with its date; trend rate shown per day |
 | Steps-ahead configuration (1-20) | ✅ | |
 | Predicted value per step | ✅ | |
 | Confidence band (lower/upper bound) | ✅ | +/- 1 x residual standard error, sqrt(SS_res / (n-2)) (about a 68% band, not 95%) |
@@ -166,8 +166,8 @@
 |---|---|
 | Data Ingestion (CSV/Excel/JSON/OCR) | ✅ |
 | Automated Data Cleaning | ✅ |
-| ML Trend Detection | ✅ |
-| ML Anomaly Detection | ✅ |
+| Trend Detection (linear regression) | ✅ |
+| Anomaly Detection (IQR statistical method) | ✅ |
 | Visualization Dashboard | ✅ |
 | Export Functionality | ✅ |
 | Version Control | ✅ |

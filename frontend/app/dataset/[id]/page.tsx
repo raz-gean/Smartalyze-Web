@@ -47,6 +47,7 @@ import {
   uploadDataset,
 } from "@/lib/api";
 import { clearStoredToken, getStoredToken } from "@/lib/auth";
+import { findDateColumns } from "@/lib/dateColumns";
 import { operationsToPandasScript } from "@/lib/codeExport";
 import { OverviewTab } from "@/components/dataset/OverviewTab";
 import { PrepareTab } from "@/components/dataset/PrepareTab";
@@ -220,6 +221,7 @@ export default function DatasetWorkspacePage() {
   // Cleaning
   const [cleaningDetection, setCleaningDetection] = useState<CleanDetectResponse | null>(null);
   const [cleaningDetecting, setCleaningDetecting] = useState(false);
+  const [cleaningScanFailed, setCleaningScanFailed] = useState(false);
   const [cleaningOperations, setCleaningOperations] = useState<CleaningOperation[]>([]);
   const [cleaningResult, setCleaningResult] = useState<CleanApplyResponse | null>(null);
   const [missingValueStrategies, setMissingValueStrategies] = useState<Record<string, MissingStrategy>>({});
@@ -373,8 +375,8 @@ export default function DatasetWorkspacePage() {
         if (firstName) {
           setAggregationGroupBy(String((textCol as { name?: string })?.name ?? firstName));
           setAggregateColumn(String((numCol as { name?: string })?.name ?? firstName));
-          setPredictionInputColumn(firstName);
-          setPredictionTargetColumn(firstName);
+          setPredictionInputColumn(""); // no date column: row order is the time axis
+          setPredictionTargetColumn(String((numCol as { name?: string })?.name ?? firstName));
           setSortColumn(firstName);
         }
       })
@@ -383,14 +385,16 @@ export default function DatasetWorkspacePage() {
   }, [datasetId, router]);
 
   // ── Lazy data loaders ──────────────────────────────────────────────────────
+  // The data scan feeds both Overview ("Issues Found") and Prepare, so it runs as soon as
+  // the workspace loads (and again whenever a save/discard resets it), on any tab.
   useEffect(() => {
-    if (activeTab !== "prepare" || !workspace || !token || cleaningDetection) return;
+    if (!workspace || !token || cleaningDetection || cleaningDetecting || cleaningScanFailed) return;
     setCleaningDetecting(true);
     detectCleaningIssues(workspace.dataset.id, token)
       .then(setCleaningDetection)
-      .catch(() => toast.error("Could not detect cleaning issues."))
+      .catch(() => { setCleaningScanFailed(true); toast.error("Could not detect cleaning issues."); })
       .finally(() => setCleaningDetecting(false));
-  }, [activeTab, workspace, token, cleaningDetection]);
+  }, [workspace, token, cleaningDetection, cleaningDetecting, cleaningScanFailed]);
 
   useEffect(() => {
     if (activeTab !== "explore" || !workspace || !token || analysisStats) return;
@@ -584,7 +588,7 @@ export default function DatasetWorkspacePage() {
 
   function handleDiscardResult() {
     setCleaningResult(null); setCleaningDetection(null); setCleaningOperations([]); setCumulativeAppliedOperations([]);
-    toast.info("Changes discarded. Detection will re-run when you return to Cleaning.");
+    toast.info("Changes discarded.");
   }
 
   async function handleApplyCleaning() {
@@ -755,7 +759,12 @@ export default function DatasetWorkspacePage() {
     if (!workspace || !token) return;
     setPredictionLoading(true);
     try {
-      setPredictionResult(await predictDataset(workspace.dataset.id, { input_column: predictionInputColumn, target_column: predictionTargetColumn, future_steps: predictionSteps }, token));
+      setPredictionResult(await predictDataset(workspace.dataset.id, {
+        input_column: predictionInputColumn || predictionTargetColumn,
+        target_column: predictionTargetColumn,
+        future_steps: predictionSteps,
+        time_column: predictionInputColumn || null,
+      }, token));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not run prediction.");
     } finally {
@@ -906,6 +915,8 @@ export default function DatasetWorkspacePage() {
                 totalRows={overviewTotalRows}
                 loadingMore={overviewLoadingMore}
                 onLoadMore={handleLoadMoreOverviewRows}
+                scanFailed={cleaningScanFailed}
+                onRetryScan={() => setCleaningScanFailed(false)}
               />
             </TabErrorBoundary>
           )}
@@ -1056,6 +1067,11 @@ export default function DatasetWorkspacePage() {
             <TabErrorBoundary tabName="Predict">
             <PredictTab
               availableColumns={availableColumns}
+              dateColumns={findDateColumns(
+                workspace.dataset.preview_json ?? [],
+                availableColumns,
+                analysisStats?.column_stats.filter((c) => c.dtype === "datetime").map((c) => c.name) ?? [],
+              )}
               analysisStats={analysisStats}
               predictionResult={predictionResult}
               predictionLoading={predictionLoading}

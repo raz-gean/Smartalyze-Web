@@ -109,7 +109,7 @@ export function EditToolbar({
           className="flex h-8 items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 text-sm font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
           onClick={onApplyAllSuggestions}
         >
-          ✨ Apply all suggestions ({suggestionCount})
+          Apply all suggested fixes ({suggestionCount})
         </button>
       )}
 

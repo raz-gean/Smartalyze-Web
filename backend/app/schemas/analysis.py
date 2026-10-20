@@ -152,6 +152,7 @@ class PredictPoint(BaseModel):
     predicted_value: float
     lower_bound: float
     upper_bound: float
+    label: str | None = None  # forecast date (YYYY-MM-DD) when a time_column is used
 
 
 class PredictResponse(BaseModel):

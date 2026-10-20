@@ -10,6 +10,7 @@ from app.models.dataset import Dataset
 from app.models.dataset_version import DatasetVersion
 from app.schemas.analysis import CorrelationResponse
 from app.services.dataset_snapshot import snapshot_to_dataframe
+from app.services.quality_detection_service import is_code_like
 
 CorrelationMethod = Literal["pearson", "spearman"]
 
@@ -42,10 +43,15 @@ def _safe_float(value) -> float:
 
 
 def _coerce_numeric_columns(df: pd.DataFrame) -> list[str]:
-    """Return column names that are numeric or can be coerced (≥80% parseable)."""
+    """Return column names that are numeric or can be coerced (≥80% parseable).
+
+    Code/ID columns (zip codes, IDs) are skipped: correlating labels means nothing.
+    """
     numeric_cols: list[str] = []
     for col in df.columns:
         series = df[col]
+        if is_code_like(col, series):
+            continue
         if pd.api.types.is_numeric_dtype(series):
             numeric_cols.append(col)
         elif series.dtype == object:

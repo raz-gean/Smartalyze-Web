@@ -45,7 +45,7 @@ export function IssuesPanel({
   if (loading) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-xs text-slate-400">
-        ✨ Analysing dataset for issues…
+        Analysing dataset for issues…
       </div>
     );
   }

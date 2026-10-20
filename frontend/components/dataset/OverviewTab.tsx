@@ -11,6 +11,8 @@ interface OverviewTabProps {
   totalRows: number | null;
   loadingMore: boolean;
   onLoadMore: () => void;
+  scanFailed: boolean;
+  onRetryScan: () => void;
 }
 
 function formatBytes(bytes: number): string {
@@ -60,7 +62,7 @@ function SeverityBadge({ severity }: { severity: string }) {
   );
 }
 
-export function OverviewTab({ workspace, cleaningDetection, onNavigate, extraRows, totalRows, loadingMore, onLoadMore }: OverviewTabProps) {
+export function OverviewTab({ workspace, cleaningDetection, onNavigate, extraRows, totalRows, loadingMore, onLoadMore, scanFailed, onRetryScan }: OverviewTabProps) {
   const { dataset } = workspace;
   const rowCount = dataset.row_count ?? 0;
   const colCount = dataset.column_count ?? 0;
@@ -184,7 +186,18 @@ export function OverviewTab({ workspace, cleaningDetection, onNavigate, extraRow
         {/* Issues */}
         <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
           <h2 className="mb-1 text-sm font-semibold text-slate-900">Issues Found</h2>
-          {!cleaningDetection ? (
+          {!cleaningDetection && scanFailed ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
+              <p className="text-sm font-medium text-slate-700">Couldn&apos;t scan your data.</p>
+              <button
+                type="button"
+                onClick={onRetryScan}
+                className="rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-50"
+              >
+                Try again
+              </button>
+            </div>
+          ) : !cleaningDetection ? (
             <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-300 border-t-indigo-600" />
               <p className="text-xs text-slate-400">Running data scan…</p>

@@ -28,7 +28,7 @@ from app.schemas.cleaning import CleaningIssue, CleaningOperation, PatternImputa
 from app.services.dataset_snapshot import build_snapshot, snapshot_to_dataframe
 from app.services.derived_column_service import evaluate_derived_column
 from app.services.pattern_imputation_service import apply_pattern_fill, find_pattern_suggestions
-from app.services.quality_detection_service import PSEUDO_NULL_TOKENS, QualityFindings, analyze_quality
+from app.services.quality_detection_service import PSEUDO_NULL_TOKENS, QualityFindings, analyze_quality, is_code_like
 
 
 def _infer_column_type(series: pd.Series) -> str:
@@ -56,10 +56,14 @@ def _infer_column_type(series: pd.Series) -> str:
         dt_df = pd.to_datetime(non_null, errors="coerce", dayfirst=True).notna().mean()
         datetime_ratio = max(dt_mf, dt_df)
 
-    if numeric_ratio >= 0.9:
-        return "numeric_string"
-    if datetime_ratio >= 0.85:
-        return "datetime_string"
+    # Codes such as zip codes or IDs ("08100", or a column named like one) are labels, not
+    # numbers or dates: don't suggest converting them ("08100" would become 8100, or even
+    # the year 8100). They fall through to categorical/text.
+    if not is_code_like(series.name, non_null):
+        if numeric_ratio >= 0.9:
+            return "numeric_string"
+        if datetime_ratio >= 0.85:
+            return "datetime_string"
 
     unique_ratio = series.nunique(dropna=True) / max(len(non_null), 1)
     if unique_ratio <= 0.5:
@@ -142,7 +146,7 @@ def _build_detection(
                     column=column_name,
                     severity="warning",
                     message=f"{column_name} appears numeric but is stored as text.",
-                    suggestion="Use convert_column_type to convert this column to numeric.",
+                    suggestion="Convert this column to numbers (Prepare → Clean → Formatting).",
                     details={"inferred_type": inferred_type, "invalid_value_samples": invalid_samples},
                 )
             )
@@ -159,7 +163,7 @@ def _build_detection(
                     column=column_name,
                     severity="info",
                     message=f"{column_name} contains date values stored as text — convert to datetime type if needed.",
-                    suggestion="Use convert_column_type to convert this column to datetime.",
+                    suggestion="Convert this column to dates (Prepare → Clean → Formatting).",
                     details={"inferred_type": inferred_type, "invalid_value_samples": invalid_dt_samples},
                 )
             )

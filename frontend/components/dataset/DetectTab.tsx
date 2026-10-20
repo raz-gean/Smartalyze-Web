@@ -66,7 +66,7 @@ export function DetectTab(props: DetectTabProps) {
 
     return (
       <div className="space-y-6">
-        <TipCard text="ML Anomaly Detection — Smartalyze uses the IQR (Interquartile Range) statistical method to automatically identify outliers: values unusually far from the typical range of a column. They may be data entry errors or genuine extremes worth investigating." />
+        <TipCard text="Outlier Detection — Smartalyze uses the IQR (Interquartile Range) statistical method to automatically identify outliers: values unusually far from the typical range of a column. They may be data entry errors or genuine extremes worth investigating." />
 
         {!anomaly ? (
           <p className="text-sm text-slate-600">Switch to this tab to run anomaly detection.</p>

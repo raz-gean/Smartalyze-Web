@@ -13,6 +13,7 @@ import type { AnalyzeStatsResponse, PredictResponse } from "@/lib/api";
 
 export interface PredictTabProps {
   availableColumns: string[];
+  dateColumns: string[];
   analysisStats: AnalyzeStatsResponse | null;
   predictionResult: PredictResponse | null;
   predictionLoading: boolean;
@@ -48,6 +49,7 @@ function getPredictionTrend(slope: number): { label: "Trending Up" | "Trending D
 export function PredictTab(props: PredictTabProps) {
   const {
     availableColumns,
+    dateColumns,
     analysisStats,
     predictionResult,
     predictionLoading,
@@ -87,13 +89,16 @@ export function PredictTab(props: PredictTabProps) {
       <div className="grid gap-4 md:grid-cols-4">
         <label className="block rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <span className="mb-1 block text-sm font-medium text-slate-900">Date column (optional)</span>
-          <span className="mb-2 block text-xs text-slate-400">Select a date column to plot predictions over time</span>
+          <span className="mb-2 block text-xs text-slate-400">
+            {dateColumns.length > 0 ? "Forecast by date, e.g. the next months" : "No date columns found; row order is used"}
+          </span>
           <select
             className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none"
             value={predictionInputColumn}
             onChange={(e) => setPredictionInputColumn(e.target.value)}
           >
-            {availableColumns.map((col) => <option key={col} value={col}>{col}</option>)}
+            <option value="">None (use row order)</option>
+            {dateColumns.map((col) => <option key={col} value={col}>{col}</option>)}
           </select>
         </label>
 
@@ -151,8 +156,14 @@ export function PredictTab(props: PredictTabProps) {
               <span className="font-semibold text-indigo-700">
                 {lastValue !== null ? lastValue.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "—"}
               </span>{" "}
-              in <span className="font-semibold text-slate-950">{predictionResult.future_steps}</span>{" "}
-              {predictionResult.future_steps === 1 ? "step" : "steps"}.
+              {lastPrediction?.label ? (
+                <>by <span className="font-semibold text-slate-950">{lastPrediction.label}</span>.</>
+              ) : (
+                <>
+                  in <span className="font-semibold text-slate-950">{predictionResult.future_steps}</span>{" "}
+                  {predictionResult.future_steps === 1 ? "step" : "steps"}.
+                </>
+              )}
             </p>
           </div>
         );
@@ -173,7 +184,7 @@ export function PredictTab(props: PredictTabProps) {
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart
                     data={predictionResult.predictions.map((p) => ({
-                      step: `Period ${p.step}`,
+                      step: p.label ?? `Period ${p.step}`,
                       predicted: p.predicted_value,
                       lower: p.lower_bound,
                       upper: p.upper_bound,
@@ -234,7 +245,7 @@ export function PredictTab(props: PredictTabProps) {
               <table className="min-w-full divide-y divide-slate-200 text-sm">
                 <thead className="bg-slate-50 text-left text-slate-500">
                   <tr>
-                    <th className="px-4 py-3 font-medium">Period</th>
+                    <th className="px-4 py-3 font-medium">{predictionResult.time_column ? "Date" : "Period"}</th>
                     <th className="px-4 py-3 font-medium">Expected</th>
                     <th className="px-4 py-3 font-medium">Est. Range</th>
                   </tr>
@@ -242,7 +253,7 @@ export function PredictTab(props: PredictTabProps) {
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {predictionResult.predictions.map((p) => (
                     <tr key={p.step}>
-                      <td className="px-4 py-3 font-medium text-slate-700">Period {p.step}</td>
+                      <td className="px-4 py-3 font-medium text-slate-700">{p.label ?? `Period ${p.step}`}</td>
                       <td className="px-4 py-3 font-semibold text-indigo-700">
                         {p.predicted_value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                       </td>
@@ -269,7 +280,7 @@ export function PredictTab(props: PredictTabProps) {
                   <div className="flex justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                     <span className="text-slate-500">Trend rate</span>
                     <span className={`font-semibold ${predictionResult.slope >= 0 ? "text-green-700" : "text-red-700"}`}>
-                      {slopeSign}{slopeAbs.toFixed(1)} per period
+                      {slopeSign}{slopeAbs.toFixed(slopeAbs < 1 ? 2 : 1)} per {predictionResult.time_column ? "day" : "period"}
                     </span>
                   </div>
                   <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">

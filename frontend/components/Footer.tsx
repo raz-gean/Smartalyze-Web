@@ -12,7 +12,7 @@ export default function Footer() {
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-8 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
         <div>
           <p className="font-medium text-indigo-700">Smartalyze</p>
-          <p>Team Raz Capstone Project HEHEHHEHE</p>
+          <p>A BSIT Capstone Project · Davao del Norte State College</p>
         </div>
 
         <nav className="flex flex-wrap gap-4">

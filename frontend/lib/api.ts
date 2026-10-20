@@ -373,16 +373,18 @@ export type PredictPoint = {
   predicted_value: number;
   lower_bound: number;
   upper_bound: number;
+  label?: string | null; // forecast date (YYYY-MM-DD) when a date column is used
 };
 
 export type PredictResponse = {
   input_column: string;
   target_column: string;
   future_steps: number;
-  slope: number;
+  slope: number; // per day when time_column is set, otherwise per row
   intercept: number;
   r_squared: number;
   predictions: PredictPoint[];
+  time_column?: string | null;
 };
 
 export type SaveResultRequest = {
@@ -697,7 +699,7 @@ export function getAnomalies(datasetId: number, token: string, datasetVersionId?
 
 export function predictDataset(
   datasetId: number,
-  payload: { input_column: string; target_column: string; future_steps: number; dataset_version_id?: number | null },
+  payload: { input_column: string; target_column: string; future_steps: number; time_column?: string | null; dataset_version_id?: number | null },
   token: string,
 ): Promise<PredictResponse> {
   return request<PredictResponse>("/analysis/predict", {

@@ -29,7 +29,7 @@ from app.models.dataset_action import DatasetAction
 from app.models.dataset import Dataset
 from app.models.dataset_version import DatasetVersion
 from app.schemas.dataset import CreateDatasetVersionRequest
-from app.services.dataset_snapshot import build_snapshot, restore_edited_dtypes
+from app.services.dataset_snapshot import build_snapshot, has_leading_zero_codes, restore_edited_dtypes
 
 ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls", ".json", ".png", ".jpg", ".jpeg"}
 PREVIEW_ROWS = 10
@@ -189,6 +189,22 @@ def _build_snapshot(
     }
 
 
+def _keep_leading_zero_codes(frame: pd.DataFrame, raw: pd.DataFrame) -> pd.DataFrame:
+    """Undo number inference for code columns: "08100" would otherwise become 8100.
+
+    `raw` is the same file read without type conversion. Only columns that pandas
+    turned into numbers AND that contain a leading-zero value are swapped back to text.
+    """
+    for column in frame.columns:
+        if (
+            pd.api.types.is_numeric_dtype(frame[column])
+            and column in raw.columns
+            and has_leading_zero_codes(raw[column])
+        ):
+            frame[column] = raw[column]
+    return frame
+
+
 def _read_dataframe(file_bytes: bytes, filename: str) -> tuple[pd.DataFrame, str]:
     extension = filename[filename.rfind(".") :].lower() if "." in filename else ""
     if extension not in ALLOWED_EXTENSIONS:
@@ -200,6 +216,7 @@ def _read_dataframe(file_bytes: bytes, filename: str) -> tuple[pd.DataFrame, str
     buffer = BytesIO(file_bytes)
     if extension == ".csv":
         frame = pd.read_csv(buffer)
+        frame = _keep_leading_zero_codes(frame, pd.read_csv(BytesIO(file_bytes), dtype=str))
         file_format = "csv"
     elif extension in {".xlsx", ".xls"}:
         frame = pd.read_excel(buffer)
@@ -221,6 +238,7 @@ def _read_dataframe(file_bytes: bytes, filename: str) -> tuple[pd.DataFrame, str
         file_format = "image"
     else:
         frame = pd.read_json(buffer)
+        frame = _keep_leading_zero_codes(frame, pd.read_json(BytesIO(file_bytes), dtype=False))
         file_format = "json"
 
     # Reject files with no usable data: zero rows (catches header-only files, where

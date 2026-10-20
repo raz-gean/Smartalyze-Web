@@ -154,6 +154,70 @@ def test_text_columns_untouched():
     assert out["Name"].tolist() == ["Ana", "Ben"] and out["City"].tolist() == ["Panabo", "123"]
 
 
+# ── Upload keeps leading-zero codes ──────────────────────────────────────────
+
+from app.services.cleaning_service import _infer_column_type  # noqa: E402
+from app.services.dataset_service import _read_dataframe  # noqa: E402
+
+UPLOAD_CSV = b"Name,Zip Code,Sales,Active\nAna,08100,1200,True\nBen,8105,950,False\nCara,,1100,True\n"
+UPLOAD_JSON = (
+    b'[{"Name":"Ana","Zip Code":"08100","Sales":1200},'
+    b'{"Name":"Ben","Zip Code":"8105","Sales":950}]'
+)
+
+
+def test_csv_upload_keeps_leading_zero_codes():
+    frame, _ = _read_dataframe(UPLOAD_CSV, "people.csv")
+    assert frame["Zip Code"].tolist()[:2] == ["08100", "8105"], frame["Zip Code"].tolist()
+    assert pd.isna(frame["Zip Code"].iloc[2])
+
+
+def test_csv_upload_still_parses_numbers_and_booleans():
+    frame, _ = _read_dataframe(UPLOAD_CSV, "people.csv")
+    assert pd.api.types.is_numeric_dtype(frame["Sales"])
+    assert pd.api.types.is_bool_dtype(frame["Active"])
+
+
+def test_json_upload_keeps_leading_zero_codes():
+    frame, _ = _read_dataframe(UPLOAD_JSON, "people.json")
+    assert frame["Zip Code"].tolist() == ["08100", "8105"], frame["Zip Code"].tolist()
+    assert pd.api.types.is_numeric_dtype(frame["Sales"])
+
+
+def test_code_columns_not_suggested_for_number_or_date_conversion():
+    # "08100" also parses as the year 8100, so code columns must skip the date check too.
+    for series in [
+        pd.Series(["08100", "08105", "8000"], name="Zip Code"),
+        pd.Series(["08100", "08105", "09000"], name="Ref"),
+        pd.Series(["123", "456", "789"], name="Student ID"),
+    ]:
+        assert _infer_column_type(series) not in ("numeric_string", "datetime_string"), series.name
+    assert _infer_column_type(pd.Series(["12", "45", "7.5"], name="Price")) == "numeric_string"
+    assert _infer_column_type(pd.Series(["2024-01-05", "2024-02-10"], name="Date")) == "datetime_string"
+    # Dates written with a leading zero are dates, not codes.
+    assert _infer_column_type(pd.Series(["03/01/2024", "01/15/2024", "12/01/2024"], name="Month")) == "datetime_string"
+
+
+def test_explore_and_detect_views_do_not_treat_zip_codes_as_numbers():
+    from types import SimpleNamespace
+
+    from app.services.analysis_service import anomaly_detection, trend_analysis
+    from app.services.correlation_service import compute_correlation
+    from app.services.structure_service import compute_structure_summary
+
+    frame, _ = _read_dataframe(
+        b"Ref,Sales,Units\n08100,100,1\n08105,110,2\n08100,105,3\n09000,98,4\n08105,900,5\n", "s.csv"
+    )
+    snapshot = _jsonb_round_trip(build_snapshot(frame, source_name="s.csv", file_type="csv", size_bytes=0))
+    version = SimpleNamespace(id=1, data_snapshot=snapshot)
+    dataset = SimpleNamespace(current_version=version, versions=[version])
+    assert "Ref" not in [c.column for c in trend_analysis(dataset).columns]
+    assert "Ref" not in [c.column for c in anomaly_detection(dataset).columns]
+    assert "Ref" not in compute_correlation(dataset).columns
+    kinds = {c["name"]: c["kind"] for c in compute_structure_summary(snapshot_to_dataframe(snapshot))["columns"]}
+    assert kinds["Ref"] != "numeric" and kinds["Sales"] == "numeric", kinds
+
+
 def _run_all():
     tests = [fn for name, fn in sorted(globals().items()) if name.startswith("test_") and callable(fn)]
     passed = 0

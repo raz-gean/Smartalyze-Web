@@ -95,15 +95,15 @@ export function DatasetHealthPanel({
             icon="◇"
             loading={loading}
           />
-          {/* AI Suggestions */}
+          {/* Suggested fixes (rule-based data scan) */}
           {(suggestionCount > 0 || loading) && (
             <MetricChip
               count={suggestionCount}
-              label="AI suggestions"
+              label="Suggested fixes"
               emptyLabel=""
               activeColor="bg-indigo-50 border-indigo-200 text-indigo-700"
               emptyColor="bg-slate-50 border-slate-200 text-slate-400"
-              icon="✨"
+              icon="✓"
               loading={loading}
             />
           )}

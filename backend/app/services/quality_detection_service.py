@@ -21,6 +21,7 @@ from difflib import SequenceMatcher
 
 import pandas as pd
 
+from app.services.dataset_snapshot import has_leading_zero_codes
 from app.schemas.cleaning import (
     CategoryStandardizationSuggestion,
     CategoryVariantGroup,
@@ -112,6 +113,15 @@ def is_code_column(name: object) -> bool:
     """True if the column name says it holds codes/IDs ("Zip Code", "CustomerID", "phone_no")."""
     spaced = _CAMEL_RE.sub(r"\1 \2", str(name))
     return any(token in _CODE_NAME_TOKENS for token in _NAME_TOKEN_SPLIT_RE.split(spaced.casefold()))
+
+
+def is_code_like(name: object, series: pd.Series) -> bool:
+    """True for code/ID columns: named like one, or holding leading-zero values ("08100").
+
+    Use before auto-treating a text column as numbers or dates: "08100" is a zip code,
+    not 8100 and not the year 8100.
+    """
+    return is_code_column(name) or has_leading_zero_codes(series)
 
 
 def preferred_label_key(label: str, count: int) -> tuple:
@@ -297,6 +307,8 @@ def detect_outliers(frame: pd.DataFrame) -> list[OutlierColumnSummary]:
     """
     df = frame.copy()
     for col in df.select_dtypes(include=["object"]).columns:
+        if is_code_like(col, df[col]):
+            continue
         coerced = pd.to_numeric(df[col], errors="coerce")
         if coerced.notna().sum() >= 2:
             df[col] = coerced

@@ -12,6 +12,7 @@ Snapshot shape (high-level):
 """
 
 import json
+import re
 from datetime import date, datetime
 from io import BytesIO
 from typing import Any, Literal
@@ -135,6 +136,17 @@ def snapshot_to_dataframe(snapshot: dict | None) -> pd.DataFrame:
     return frame[ordered]
 
 
+def has_leading_zero_codes(values: pd.Series) -> bool:
+    """True if any text value looks like a number with a leading zero ("0123", "08100").
+
+    Such values are codes (IDs, zip codes), not quantities: converting them to numbers
+    would silently drop the zero.
+    """
+    # The whole value must be digits: "03/01/2024" starts with 0 but is a date, not a code.
+    text = [v.strip() for v in values.dropna() if isinstance(v, str)]
+    return any(re.fullmatch(r"[+-]?0\d+", v) for v in text)
+
+
 def restore_edited_dtypes(frame: pd.DataFrame, previous_columns: list[dict] | None) -> pd.DataFrame:
     """Re-type columns after a manual (Edit tab) save.
 
@@ -165,7 +177,7 @@ def restore_edited_dtypes(frame: pd.DataFrame, previous_columns: list[dict] | No
 
         prior = previous.get(str(name))
         if prior is None or prior.startswith(("int", "float")):
-            if prior is None and present.astype(str).str.strip().str.match(r"^[+-]?0\d").any():
+            if prior is None and has_leading_zero_codes(present.astype(str)):
                 continue
             parsed = pd.to_numeric(cleaned, errors="coerce")
         elif prior.startswith("datetime64"):

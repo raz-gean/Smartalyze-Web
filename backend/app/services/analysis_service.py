@@ -27,7 +27,7 @@ from app.schemas.analysis import (
     TrendResponse,
 )
 from app.services.dataset_snapshot import snapshot_to_dataframe
-from app.services.quality_detection_service import is_code_column
+from app.services.quality_detection_service import is_code_column, is_code_like
 
 SUPPORTED_AGG_FUNCS = {"sum", "count", "mean", "min", "max"}
 
@@ -125,21 +125,31 @@ def analyze_stats(dataset: Dataset, version_id: int | None = None) -> AnalyzeSta
     )
 
 
-def _time_series_to_x(series: pd.Series) -> tuple[np.ndarray, list[str]]:
-    """Convert a datetime-like Series to float x-values (days since first) and label strings.
+def _sort_by_time_column(df: pd.DataFrame, time_column: str) -> tuple[pd.DataFrame, pd.Series]:
+    """Return `df` sorted chronologically by `time_column`, plus the parsed dates (same index).
 
-    Accepts both proper datetime64 columns and string columns that are at least 80%
-    parseable as dates. The caller must pass a fully non-null series (drop NaT rows first).
+    Accepts proper datetime columns and text columns that are at least 80% parseable as
+    dates. Rows whose date is missing or unparseable are dropped. Sorting uses the parsed
+    dates, not the raw text ("07/21/2005" would sort wrongly as a string).
     """
-    if not pd.api.types.is_datetime64_any_dtype(series):
-        parsed = pd.to_datetime(series, errors="coerce")
-        if parsed.notna().mean() < 0.8:
+    series = df[time_column]
+    if pd.api.types.is_datetime64_any_dtype(series):
+        parsed = series
+    else:
+        non_null = series.notna()
+        parsed = pd.to_datetime(series, errors="coerce", format="mixed")
+        if non_null.sum() == 0 or parsed[non_null].notna().mean() < 0.8:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="time_column could not be parsed as datetime (fewer than 80% of values are valid dates).",
             )
-        series = parsed
+    keep = parsed.notna()
+    order = parsed[keep].sort_values(kind="stable").index
+    return df.loc[order].reset_index(drop=True), parsed.loc[order].reset_index(drop=True)
 
+
+def _time_series_to_x(series: pd.Series) -> tuple[np.ndarray, list[str]]:
+    """Convert a parsed, non-null datetime Series to x-values (days since first) and labels."""
     days = (series - series.min()).dt.days.to_numpy(dtype=float)
     span = int(days.max()) if len(days) > 1 else 0
     fmt = "%Y-%m-%d" if span > 365 else "%b %d"
@@ -178,22 +188,23 @@ def trend_analysis(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"time_column '{time_column}' not found in dataset.",
             )
-        # Drop rows without a time value, sort chronologically, reset index.
-        df = df[df[time_column].notna()].sort_values(by=time_column).reset_index(drop=True)
-        x_all, labels_all = _time_series_to_x(df[time_column])
+        # Drop rows without a valid date, sort chronologically, reset index.
+        df, parsed_time = _sort_by_time_column(df, time_column)
+        x_all, labels_all = _time_series_to_x(parsed_time)
         used_time_column = time_column
     # -------------------------
 
     # Coerce object-dtype columns that contain numeric values (covers JSONB round-trip dtype drift).
-    # Skip the time_column — it must remain parseable as datetime.
+    # Skip the time_column — it must remain parseable as datetime — and code/ID columns,
+    # whose numbers are labels (a "trend" in zip codes is meaningless).
     for _col in df.select_dtypes(include=["object"]).columns:
-        if _col == time_column:
+        if _col == time_column or is_code_like(_col, df[_col]):
             continue
         _coerced = pd.to_numeric(df[_col], errors="coerce")
         if _coerced.notna().sum() >= 2:
             df[_col] = _coerced
 
-    numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+    numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c]) and not is_code_column(c)]
     results: list[ColumnTrendResult] = []
 
     for col in numeric_cols:
@@ -260,6 +271,8 @@ def anomaly_detection(dataset: Dataset, version_id: int | None = None) -> Anomal
     df = snapshot_to_dataframe(version.data_snapshot)
 
     for _col in df.select_dtypes(include=["object"]).columns:
+        if is_code_like(_col, df[_col]):
+            continue
         _coerced = pd.to_numeric(df[_col], errors="coerce")
         if _coerced.notna().sum() >= 2:
             df[_col] = _coerced
@@ -323,9 +336,11 @@ def predict_column(
 ) -> PredictResponse:
     """Predict future values for a numeric target column using linear regression.
 
-    When time_column is provided the data is sorted chronologically and each
-    prediction step is 1 day beyond the last observed date, making the slope
-    "change per day." Without time_column the original row-index behavior is used.
+    When time_column is provided the data is sorted chronologically, the slope is
+    "change per day", and each prediction step moves forward by the data's typical
+    spacing (median gap between consecutive dates, at least 1 day), so monthly data
+    forecasts the next months; each point carries its date as `label`.
+    Without time_column the original row-index behavior is used.
     snapshot_override lets callers pass an in-memory snapshot without persisting it.
     """
     if snapshot_override is not None:
@@ -339,12 +354,14 @@ def predict_column(
 
     used_time_column: str | None = None
     time_x_all: np.ndarray | None = None
+    first_date: pd.Timestamp | None = None
 
     if time_column is not None:
         if time_column not in df.columns:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"time_column '{time_column}' not found.")
-        df = df[df[time_column].notna()].sort_values(by=time_column).reset_index(drop=True)
-        time_x_all, _ = _time_series_to_x(df[time_column])
+        df, parsed_time = _sort_by_time_column(df, time_column)
+        time_x_all, _ = _time_series_to_x(parsed_time)
+        first_date = parsed_time.min()
         used_time_column = time_column
 
     y_numeric = pd.to_numeric(df[target_column], errors="coerce")
@@ -357,9 +374,18 @@ def predict_column(
             detail=f"Column '{target_column}' has too few numeric values to predict (need at least 2).",
         )
 
+    step_size = 1.0
+    calendar_months = 0  # monthly/yearly data steps by calendar months, so labels stay on e.g. the 1st
     if time_column is not None:
         x = time_x_all[valid_mask].reshape(-1, 1)  # type: ignore[index]
         last_x = float(x[-1, 0])
+        gaps = np.diff(np.unique(x[:, 0]))
+        if len(gaps) > 0:
+            step_size = max(float(np.median(gaps)), 1.0)
+            if 27 <= step_size <= 32:
+                calendar_months = 1
+            elif 360 <= step_size <= 370:
+                calendar_months = 12
     else:
         x = np.arange(len(y)).reshape(-1, 1)
         last_x = float(len(y) - 1)
@@ -374,15 +400,29 @@ def predict_column(
     r_squared = round(1.0 - ss_res / ss_tot, 4) if ss_tot > 1e-10 else 0.0
     std_error = float(np.sqrt(ss_res / max(len(y) - 2, 1)))
 
-    predictions = [
-        PredictPoint(
-            step=i,
-            predicted_value=round(float(model.predict([[last_x + i]])[0]), 4),
-            lower_bound=round(float(model.predict([[last_x + i]])[0]) - std_error, 4),
-            upper_bound=round(float(model.predict([[last_x + i]])[0]) + std_error, 4),
+    predictions: list[PredictPoint] = []
+    for i in range(1, future_steps + 1):
+        label: str | None = None
+        if first_date is not None:
+            if calendar_months:
+                future_date = first_date + pd.Timedelta(days=last_x) + pd.DateOffset(months=calendar_months * i)
+                future_x = float((future_date - first_date).days)
+            else:
+                future_x = last_x + i * step_size
+                future_date = first_date + pd.Timedelta(days=future_x)
+            label = future_date.strftime("%Y-%m-%d")
+        else:
+            future_x = last_x + i * step_size
+        predicted = float(model.predict([[future_x]])[0])
+        predictions.append(
+            PredictPoint(
+                step=i,
+                predicted_value=round(predicted, 4),
+                lower_bound=round(predicted - std_error, 4),
+                upper_bound=round(predicted + std_error, 4),
+                label=label,
+            )
         )
-        for i in range(1, future_steps + 1)
-    ]
 
     return PredictResponse(
         input_column=input_column,

@@ -5,6 +5,8 @@ from typing import Any
 
 import pandas as pd
 
+from app.services.quality_detection_service import is_code_like
+
 
 def _safe_float(value: Any) -> float | None:
     if value is None:
@@ -34,8 +36,9 @@ def _infer_kind(series: pd.Series) -> str:
     if non_null.empty:
         return "unknown"
 
+    # Code/ID columns ("08100") are labels, not numbers: summarise them as text/categories.
     coerced = pd.to_numeric(non_null.astype(str).str.strip(), errors="coerce")
-    if coerced.notna().mean() >= 0.8:
+    if coerced.notna().mean() >= 0.8 and not is_code_like(series.name, non_null):
         return "numeric"
 
     unique_ratio = non_null.nunique(dropna=True) / max(len(non_null), 1)

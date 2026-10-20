@@ -94,7 +94,7 @@ export function EditableCell({
       )}
       {isMissing && !isDirty ? (
         <span className="text-slate-300 italic text-xs">
-          {hasSuggestion ? `✨ ${String(suggestion)}` : "empty"}
+          {hasSuggestion ? `Suggested: ${String(suggestion)}` : "empty"}
         </span>
       ) : value === "" && !isDirty ? (
         <span className="font-mono text-xs text-slate-400">&quot;&quot;</span>

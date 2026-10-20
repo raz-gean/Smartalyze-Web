@@ -32,7 +32,7 @@ function describeOperation(op: EditOperation): string {
     case "row_delete": return "row deletion";
     case "row_insert": return "row insertion";
     case "col_rename": return `column rename`;
-    case "bulk_suggest": return `${op.changes.length} AI suggestion${op.changes.length !== 1 ? "s" : ""}`;
+    case "bulk_suggest": return `${op.changes.length} suggested fix${op.changes.length !== 1 ? "es" : ""}`;
     case "col_delete": return `deletion of column "${op.colName}"`;
     case "col_insert": return `addition of column "${op.colName}"`;
   }
@@ -107,7 +107,7 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
   const [undoStack, setUndoStack] = useState<EditOperation[]>([]);
   const [redoStack, setRedoStack] = useState<EditOperation[]>([]);
 
-  // ── AI suggestions ───────────────────────────────────────────────────────
+  // ── Suggested fixes (from the rule-based data scan) ───────────────────────
   const [suggestions, setSuggestions] = useState<Map<string, unknown>>(new Map());
   const [duplicateRowIndices, setDuplicateRowIndices] = useState<Set<number>>(new Set());
   const [outlierCells, setOutlierCells] = useState<Set<string>>(new Set());
@@ -272,7 +272,7 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
     setPendingDraft(null);
   }
 
-  // ── Fetch AI suggestions after rows loaded ───────────────────────────────
+  // ── Fetch suggested fixes after rows loaded ──────────────────────────────
   useEffect(() => {
     if (loadingRows || rows.length === 0) return;
     let cancelled = false;
@@ -794,7 +794,7 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
       </div>
 
       {suggestionsLoading && (
-        <p className="text-xs text-slate-400 px-1">✨ Loading AI suggestions…</p>
+        <p className="text-xs text-slate-400 px-1">Loading suggested fixes…</p>
       )}
 
       {errorMsg && (
