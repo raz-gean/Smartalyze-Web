@@ -16,7 +16,7 @@ Report mismatches. Do not modify code, docs or diagrams.
 
 ## Compare against
 - `features.md` and `README.md` (text; known to lag, e.g. README says 5 tabs, code has 6 and a different env var name).
-- `docs/defense-3rd-year-minutes.md` and `docs/capstone-document-issues.md` (status markers may be stale).
+- `docs/defense-3rd-year-minutes.md` and `docs/capstone-issues.md` (status markers may be stale; record new findings there with the next free A/S/D ID).
 - `docs/*.drawio` diagrams: read as XML text and extract labels (`value="..."`). Check UseCase, DFD-Level1, CFD-Level0, ERD (against `backend/app/models`), SystemArchitecture, ConceptualFramework.
 - The capstone PDF/docx only if the user points to specific sections; they are large, so read only the pages asked for.
 

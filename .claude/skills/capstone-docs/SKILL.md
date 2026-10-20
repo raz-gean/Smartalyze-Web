@@ -9,7 +9,7 @@ Smartalyze is a DNSC BSIT capstone. Documentation is graded alongside the system
 
 ## Sources of truth (read before answering)
 - `docs/defense-3rd-year-minutes.md`: panel comments, two sets, System + Documentation. All 10 System items are implemented. Documentation items still open: LLM comparison (Groq vs Gemini vs Ollama), statistician validation, revised use case diagram, FR/NFR wording ("decision support" -> "AI insights"), revised DFD/CFD, improved RRL.
-- `docs/capstone-document-issues.md`: audit of `CAPSTONE DOCUMENT_2.pdf` (highlights, citations, missing DFD/CFD modules, typos). Check its status markers; they may be stale.
+- `docs/capstone-issues.md`: tracker of differences between the manuscript (`SMARTALYZE_ AN AI-ASSISTED DATA VISUALIZATION AND ANALYSIS PLATFORM.pdf`) and the system, plus open panel items, with IDs (A = decisions, S = system, D = document). Check its status markers; they may be stale.
 - `docs/background-agenda-alignment.md`: DNSC SAILS (I2/ICT4D), CHED A.C.H.I.E.V.E. (I and H enablers), DOST HNRDA (AI and Smart Cities). For Dean sign-off.
 - Diagrams in `docs/*.drawio`: UseCase, DFD-Level1, CFD-Level0, ERD, SystemArchitecture, ConceptualFramework (+ `docs/Assignment/` views).
 - `features.md` and `README.md` describe shipped features but can lag. Verify claims against code (`backend/app/routes`, `frontend/components/dataset`) before putting them in a document.
