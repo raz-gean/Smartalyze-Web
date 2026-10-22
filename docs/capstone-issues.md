@@ -20,10 +20,10 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 - **Recommended:** follow the document. Get a Groq API key, then do **S1**. If we stay with Ollama instead, every Groq mention above must change (**D11**).
 - **Resolved (Oct 21, 2026):** Groq key added to `backend/.env` (`AI_PROVIDER=groq`). Groq has retired the Llama 3.3 models, so the default model is now `openai/gpt-oss-120b`, chosen after comparing the available models. All four AI features were tested through the API and in the browser. Follow-ups: **S10** (answer quality) and **D11** (manuscript wording).
 
-### A2. Forecast range: what does it mean? ❓
+### A2. Forecast range: what does it mean? ✅ Decided: 95% prediction interval
 - **Document (p.69):** forecasts have "confidence bands" / "confidence intervals".
-- **System:** the band is predicted value ± 1 residual standard error (about a 68% band). It is not a confidence or prediction interval (`analysis_service.predict_column`).
-- **Recommended:** do **S2** (a true 95% prediction interval) and confirm it with the statistician; then the document's wording becomes correct (**D12**).
+- **System (before):** the band was predicted value ± 1 residual standard error (about a 68% band, same width at every step). It was not a confidence or prediction interval.
+- **Resolved (Oct 22, 2026):** **S2** done. The range is now a 95% prediction interval that widens for forecasts further ahead, verified against statsmodels. Still to do: the statistician's review, and the manuscript wording (**D12**).
 
 ### A3. Should the use case diagram show every feature? ❓
 - **Document (p.50, Figure 6):** 10 use cases (Register, Login, Upload, View, List, Apply Cleaning, Detect Issues, Save Result, Export, Delete).
@@ -37,7 +37,7 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 | ID | Change | Why | Status |
 |---|---|---|---|
 | S1 | Make Groq the default AI provider (`AI_PROVIDER=groq`, `GROQ_API_KEY` in `backend/.env`); keep Ollama and Gemini as alternatives | Matches the document (A1) | ✅ Done (model `openai/gpt-oss-120b`) |
-| S2 | Forecast band → 95% prediction interval | Makes "confidence/prediction interval" true (A2); statistician item | ❓ |
+| S2 | Forecast band → 95% prediction interval | Makes "confidence/prediction interval" true (A2); statistician item | ✅ Done: predicted ± t(0.975, n−2) · s · √(1 + 1/n + (x₀ − x̄)²/Sxx); labelled "Likely range (95%)"; tests in `tests/test_prediction_interval.py`; validation pack 51/51 matched, coverage simulation 94.5% |
 | S3 | Trend analysis uses scikit-learn `LinearRegression` instead of NumPy `polyfit` (identical results) | p.67 says trends use scikit-learn; today only Predict does | ⬜ |
 | S4 | Edit tab "Suggested fixes" never appear: it reads `details.fill_value`, which the scan doesn't send, and matches issue kind `"outlier"` while the scan sends `"outliers"` (health panel says "No outliers" next to an outlier issue) | Visible bug | ⬜ |
 | S5 | Edit tab column badges show raw type names (`datetime_string`, `categorical`) | Jargon for non-technical users | ⬜ |
@@ -68,7 +68,7 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 | D6 | FR 2, p.47 | Upload, organize, delete; no rename | Add renaming datasets (panel item; Scope p.8 mentions it). | ⬜ |
 | D7 | Objective 6, p.7; DFD 4.0, p.54 | Export formats CSV, Excel, JSON | Add **Parquet** (the system exports it), or leave it out on purpose. | ⬜ |
 | D8 | FR 7 / FR 9 / Technologies | Not mentioned | Add the **correlation heatmap** (Pearson and Spearman), the **dataset health score**, and **keeping leading-zero codes** (zip codes, IDs) as text. | ⬜ |
-| D9 | Table 9, p.78 | All results "TBD" | Fill with real results: automated tests 52/53 passed; statistical validation 41/42 values matched NumPy/SciPy/statsmodels; end-to-end browser tests passed. Update before the defense. | ⬜ |
+| D9 | Table 9, p.78 | All results "TBD" | Fill with real results (as of Oct 22, 2026): automated tests 67/68 passed; statistical validation 51/51 checks matched NumPy/SciPy/statsmodels; end-to-end browser tests passed. Re-check the numbers after the UI freeze. | ⬜ |
 
 ### Wrong details
 
@@ -76,7 +76,7 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 |---|---|---|---|---|
 | D10 | Data Dictionary, Table 3 Users, pp.56–57 | Key column named `user_id`; `password_hash` marked **Unique**; `avatar` missing | Column is `id`; **`username`** is unique (not `password_hash`); add `avatar` (Text, optional profile picture, max 1 MB). | ⬜ |
 | D11 | Methodology, p.38 | "a locally installed language model for AI assistance" | "a cloud-based language model (Groq)". Optionally name the model `openai/gpt-oss-120b` and note that the Llama model was retired by Groq. | ⬜ |
-| D12 | Prediction, p.69 | "Confidence bands based on regression residual error"; "Confidence intervals" | Depends on A2/S2: "a 95% prediction interval". | ❓ |
+| D12 | Prediction, p.69 | "Confidence bands based on regression residual error"; "Confidence intervals" | S2 is done. Replace with: "Each forecast includes a 95% prediction interval, the range in which a single future value is expected to fall 95% of the time if the linear trend continues. It is computed as ŷ ± t(0.975, n−2) · s · √(1 + 1/n + (x₀ − x̄)²/Sxx), so it widens for forecasts further from the data." | ⬜ |
 | D13 | Trend Analysis, p.67 | Trend analysis "uses the Linear Regression model from Scikit-learn" | True once S3 is done; otherwise "least-squares linear regression (NumPy)". | ⬜ |
 | D14 | Data Dictionary, Table 4 AuthSessions, p.57 | `id` primary key missing | Add `id` (Integer, Primary Key). | ⬜ |
 | D15 | Gantt chart, p.41; cover, p.1 | Gantt chart ends **May 2026**, cover says **June 2026**; work continues into November | Align the dates, or add a revised schedule. | ⬜ |
@@ -114,7 +114,7 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 
 | Item | Status |
 |---|---|
-| Validation by a statistician | 🟡 Internal validation done (41/42 values matched); statistician contacted; formal sign-off pending. Tied to A2/S2. |
+| Validation by a statistician | 🟡 Internal validation done (51/51 checks matched, including the new 95% prediction interval); statistician contacted; formal sign-off pending. |
 | Improve the RRL | 🟡 In progress |
 | All 10 System comments; LLM comparison; use case, CFD and DFD revisions; "decision support" → "AI insights" | ✅ Done (see `defense-3rd-year-minutes.md`) |
 
@@ -142,10 +142,10 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 | ID | Item | Owner | Status |
 |---|---|---|---|
 | A1 | AI provider: Groq (document) vs Ollama (system) | Team | ✅ Groq |
-| A2 | Forecast range meaning (95% interval) | Team | ❓ |
+| A2 | Forecast range meaning (95% interval) | Team | ✅ 95% prediction interval |
 | A3 | Use case diagram completeness | Team | ❓ |
 | S1 | Groq as default provider | Sys | ✅ |
-| S2 | 95% prediction interval | Sys | ❓ |
+| S2 | 95% prediction interval | Sys | ✅ |
 | S3 | Trend analysis via scikit-learn | Sys | ⬜ |
 | S4 | Edit tab suggested fixes / outlier count | Sys | ⬜ |
 | S5 | Plain-language type badges | Sys | ⬜ |
@@ -165,7 +165,7 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 | D9 | Table 9 test results | Doc | ⬜ |
 | D10 | Users table: `id`, unique `username`, `avatar` | Doc | ⬜ |
 | D11 | p.38 "locally installed language model" | Doc | ⬜ |
-| D12 | Prediction interval wording | Doc | ❓ |
+| D12 | Prediction interval wording | Doc | ⬜ (wording ready) |
 | D13 | Trend analysis library | Doc | ⬜ |
 | D14 | AuthSessions `id` | Doc | ⬜ |
 | D15 | Gantt chart vs cover date | Doc | ⬜ |

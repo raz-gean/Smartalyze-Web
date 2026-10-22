@@ -385,6 +385,7 @@ export type PredictResponse = {
   r_squared: number;
   predictions: PredictPoint[];
   time_column?: string | null;
+  interval_level?: number | null; // 0.95 = bounds are a 95% prediction interval; null = too little data for a range
 };
 
 export type SaveResultRequest = {

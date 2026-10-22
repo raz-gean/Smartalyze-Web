@@ -5,6 +5,7 @@ import math
 import numpy as np
 import pandas as pd
 from fastapi import HTTPException, status
+from scipy import stats
 
 from app.models.dataset import Dataset
 from app.models.dataset_version import DatasetVersion
@@ -36,6 +37,10 @@ SUPPORTED_AGG_FUNCS = {"sum", "count", "mean", "min", "max"}
 # result the UI only ever renders a top-N slice of. total_groups on the response
 # tells the frontend the true count so it can show a "top N of M" notice.
 MAX_GROUP_RESULTS = 50
+
+# Forecast ranges are prediction intervals at this level: about 95 of 100 future
+# values should fall inside them if the linear trend holds.
+PREDICTION_INTERVAL_LEVEL = 0.95
 
 
 def _get_version(dataset: Dataset, version_id: int | None) -> DatasetVersion:
@@ -342,6 +347,12 @@ def predict_column(
     forecasts the next months; each point carries its date as `label`.
     Without time_column the original row-index behavior is used.
     snapshot_override lets callers pass an in-memory snapshot without persisting it.
+
+    Each point's lower/upper bound is a 95% prediction interval for a single future
+    value: predicted +/- t(0.975, n-2) * s * sqrt(1 + 1/n + (x0 - mean(x))^2 / Sxx),
+    where s is the residual standard error. It widens the further x0 is from the
+    data. With only 2 values there are no degrees of freedom left to estimate s, so
+    no range is given (bounds equal the prediction, interval_level is None).
     """
     if snapshot_override is not None:
         df = snapshot_to_dataframe(snapshot_override)
@@ -398,7 +409,24 @@ def predict_column(
     ss_res = float(np.sum((y - y_pred_train) ** 2))
     ss_tot = float(np.sum((y - np.mean(y)) ** 2))
     r_squared = round(1.0 - ss_res / ss_tot, 4) if ss_tot > 1e-10 else 0.0
-    std_error = float(np.sqrt(ss_res / max(len(y) - 2, 1)))
+
+    n = len(y)
+    x_train = x[:, 0].astype(float)
+    x_mean = float(np.mean(x_train))
+    sxx = float(np.sum((x_train - x_mean) ** 2))
+    # All values on the same date leave no slope to estimate (the fit is just the mean),
+    # so only one degree of freedom is used up instead of two.
+    dof = n - 2 if sxx > 0 else n - 1
+    interval_level: float | None = PREDICTION_INTERVAL_LEVEL if n >= 3 and dof >= 1 else None
+    if interval_level is not None:
+        std_error = float(np.sqrt(ss_res / dof))
+        t_crit = float(stats.t.ppf(1 - (1 - interval_level) / 2, dof))
+
+    def _half_width(future_x: float) -> float:
+        if interval_level is None:
+            return 0.0
+        distance = (future_x - x_mean) ** 2 / sxx if sxx > 0 else 0.0
+        return t_crit * std_error * math.sqrt(1 + 1 / n + distance)
 
     predictions: list[PredictPoint] = []
     for i in range(1, future_steps + 1):
@@ -414,12 +442,13 @@ def predict_column(
         else:
             future_x = last_x + i * step_size
         predicted = float(model.predict([[future_x]])[0])
+        half_width = _half_width(future_x)
         predictions.append(
             PredictPoint(
                 step=i,
                 predicted_value=round(predicted, 4),
-                lower_bound=round(predicted - std_error, 4),
-                upper_bound=round(predicted + std_error, 4),
+                lower_bound=round(predicted - half_width, 4),
+                upper_bound=round(predicted + half_width, 4),
                 label=label,
             )
         )
@@ -433,6 +462,7 @@ def predict_column(
         r_squared=r_squared,
         predictions=predictions,
         time_column=used_time_column,
+        interval_level=interval_level,
     )
 
 

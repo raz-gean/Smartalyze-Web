@@ -164,6 +164,7 @@ class PredictResponse(BaseModel):
     r_squared: float
     predictions: list[PredictPoint]
     time_column: str | None = None  # echoes back which time column was used
+    interval_level: float | None = None  # 0.95 = bounds are a 95% prediction interval; None = too little data for a range
 
 
 # ── Correlation Matrix ────────────────────────────────────────────────────────

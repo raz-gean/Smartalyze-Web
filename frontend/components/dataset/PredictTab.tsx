@@ -34,7 +34,9 @@ function InsightCard({ text }: { text: string }) {
   );
 }
 
-function getPredictionConfidence(rSquared: number): { label: string; badgeClasses: string } {
+function getPredictionConfidence(rSquared: number, hasRange: boolean): { label: string; badgeClasses: string } {
+  // Two points always fit a line perfectly (R² = 1), so R² alone would say "High".
+  if (!hasRange) return { label: "Low confidence — too little data; treat as a rough estimate", badgeClasses: "bg-red-100 text-red-700" };
   if (rSquared >= 0.7) return { label: "High confidence — consistent historical data", badgeClasses: "bg-green-100 text-green-700" };
   if (rSquared >= 0.4) return { label: "Medium confidence — some variation in historical data", badgeClasses: "bg-yellow-100 text-yellow-700" };
   return { label: "Low confidence — irregular data; treat as a rough estimate", badgeClasses: "bg-red-100 text-red-700" };
@@ -141,13 +143,13 @@ export function PredictTab(props: PredictTabProps) {
       {predictionResult && (() => {
         const lastPrediction = predictionResult.predictions[predictionResult.predictions.length - 1];
         const lastValue = lastPrediction ? lastPrediction.predicted_value : null;
-        const confidence = getPredictionConfidence(predictionResult.r_squared);
+        const confidence = getPredictionConfidence(predictionResult.r_squared, Boolean(predictionResult.interval_level));
         const trend = getPredictionTrend(predictionResult.slope);
         return (
           <div className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-5 shadow-sm">
             <div className="flex flex-wrap items-center gap-2">
               <span className={`rounded-full px-3 py-1 text-xs font-semibold ${trend.badgeClasses}`}>{trend.label}</span>
-              <span className={`rounded-full px-3 py-1 text-xs font-semibold ${confidence.badgeClasses}`}>{confidence.label} confidence</span>
+              <span className={`rounded-full px-3 py-1 text-xs font-semibold ${confidence.badgeClasses}`}>{confidence.label}</span>
             </div>
             <p className="mt-3 text-sm text-slate-700">
               If this continues,{" "}
@@ -203,10 +205,11 @@ export function PredictTab(props: PredictTabProps) {
                     <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} width={40} />
                     <Tooltip
                       contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0" }}
+                      itemStyle={{ color: "#334155" }} // the "lower" area is filled white, which Recharts would reuse as its text color
                       formatter={(v, name) => {
                         const val = typeof v === "number" ? v.toFixed(1) : String(v ?? "");
-                        if (name === "upper") return [val, "Upper bound"];
-                        if (name === "lower") return [val, "Lower bound"];
+                        if (name === "upper") return [val, "Likely range (95%), high"];
+                        if (name === "lower") return [val, "Likely range (95%), low"];
                         return [val, "Predicted"];
                       }}
                     />
@@ -236,7 +239,9 @@ export function PredictTab(props: PredictTabProps) {
                 </ResponsiveContainer>
                 </div>
                 <p className="mt-2 text-xs text-slate-400 leading-relaxed">
-                  The shaded area shows the estimated range where the true value is likely to fall. A wider band means higher uncertainty.
+                  {predictionResult.interval_level
+                    ? `The shaded area is the likely range: if the trend continues, the real value should land inside it about ${Math.round(predictionResult.interval_level * 100)} times out of 100. It gets wider further ahead because those forecasts are less certain.`
+                    : "Not enough data to show a likely range. Add at least 3 values to see one."}
                 </p>
               </div>
             )}
@@ -247,7 +252,9 @@ export function PredictTab(props: PredictTabProps) {
                   <tr>
                     <th className="px-4 py-3 font-medium">{predictionResult.time_column ? "Date" : "Period"}</th>
                     <th className="px-4 py-3 font-medium">Expected</th>
-                    <th className="px-4 py-3 font-medium">Est. Range</th>
+                    <th className="px-4 py-3 font-medium">
+                      {predictionResult.interval_level ? `Likely range (${Math.round(predictionResult.interval_level * 100)}%)` : "Likely range"}
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
@@ -258,9 +265,15 @@ export function PredictTab(props: PredictTabProps) {
                         {p.predicted_value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-500">
-                        {p.lower_bound.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                        {" – "}
-                        {p.upper_bound.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                        {predictionResult.interval_level ? (
+                          <>
+                            {p.lower_bound.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                            {" – "}
+                            {p.upper_bound.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                          </>
+                        ) : (
+                          "—"
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -270,7 +283,7 @@ export function PredictTab(props: PredictTabProps) {
           </div>
 
           {(() => {
-            const confidence = getPredictionConfidence(predictionResult.r_squared);
+            const confidence = getPredictionConfidence(predictionResult.r_squared, Boolean(predictionResult.interval_level));
             const slopeAbs = Math.abs(predictionResult.slope);
             const slopeSign = predictionResult.slope >= 0 ? "+" : "−";
             return (

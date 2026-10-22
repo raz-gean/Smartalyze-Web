@@ -90,11 +90,11 @@
 | Date column (optional) | ✅ | Only date-like columns offered (default: none = row order). Sorts by the real dates, steps forward by the data's typical spacing (e.g. monthly), labels each forecast with its date; trend rate shown per day |
 | Steps-ahead configuration (1-20) | ✅ | |
 | Predicted value per step | ✅ | |
-| Confidence band (lower/upper bound) | ✅ | +/- 1 x residual standard error, sqrt(SS_res / (n-2)) (about a 68% band, not 95%) |
+| Likely range (lower/upper bound) | ✅ | 95% prediction interval: predicted +/- t(0.975, n-2) x s x sqrt(1 + 1/n + (x0 - mean x)^2 / Sxx), s = residual standard error; widens for forecasts further ahead; verified against statsmodels; no range with fewer than 3 values |
 | R-squared (model fit quality) | ✅ | Shown as High/Medium/Low confidence badge |
 | Slope / trend rate | ✅ | Per-period change, color-coded |
-| Forecast area chart | ✅ | Recharts AreaChart with shaded confidence band |
-| Results table | ✅ | Period, expected value, estimated range |
+| Forecast area chart | ✅ | Recharts AreaChart with the shaded 95% likely range |
+| Results table | ✅ | Period, expected value, likely range (95%) |
 
 ---
 
@@ -142,7 +142,7 @@
 | Aggregation bar chart | ✅ | Group-by results |
 | Trend line chart | ✅ | Explore tab |
 | Correlation heatmap | ✅ | Detect tab |
-| Prediction area chart | ✅ | Forecast with confidence band |
+| Prediction area chart | ✅ | Forecast with 95% likely range |
 | Anomaly bar chart | ✅ | Outlier counts per column |
 
 ---

@@ -48,7 +48,7 @@ Smartalyze is a web-based data cleaning, analysis, and insight generation system
 - Linear regression forecast on any numeric column
 - Optional date column for time-axis labeling
 - Configurable steps ahead (1–20)
-- Returns: predicted values, confidence bands (lower/upper), R², slope, trend direction badge
+- Returns: predicted values, a 95% prediction interval per step (lower/upper), R², slope, trend direction badge
 
 ### Manual Editing (Edit Tab)
 - Click any cell to edit its value inline

@@ -34,7 +34,7 @@ const FEATURES = [
       </svg>
     ),
     title: "Forecast",
-    desc: "Linear trend forecasting with confidence bands — see where your data is heading.",
+    desc: "Linear trend forecasts with a 95% likely range — see where your data is heading.",
   },
 ];
 
