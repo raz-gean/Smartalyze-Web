@@ -141,6 +141,17 @@ export function PredictTab(props: PredictTabProps) {
         </div>
       </div>
 
+      {/* Without a date column the row order is the time axis, which only means something
+          when each row is a point in time and the rows are already in time order. */}
+      {!predictionInputColumn && (
+        <div role="note" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <strong>No date column selected.</strong> The forecast treats your rows as equally spaced time steps in their current order.
+          Only rely on it if each row is a point in time and the rows are already sorted by time (for example, one row per month).
+          For a list such as customers or survey answers, a forecast has no meaning.
+          {dateColumns.length > 0 && <> Pick a <strong>Date column</strong> above to forecast by date instead.</>}
+        </div>
+      )}
+
       {predictionResult && (() => {
         const lastPrediction = predictionResult.predictions[predictionResult.predictions.length - 1];
         const lastValue = lastPrediction ? lastPrediction.predicted_value : null;

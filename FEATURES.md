@@ -67,7 +67,7 @@
 |---|---|---|
 | Column Analysis | ✅ | Type in plain words (Numbers, Categories, Text, Dates, Yes / No), null %, unique count, mean, median, mode, min, max |
 | Aggregation (group by + agg function) | ✅ | Sum, mean, count, min, max; rendered as bar chart |
-| Trend detection per numeric column | ✅ | scikit-learn LinearRegression slope — Increasing / Stable / Decreasing / Volatile (R² < 0.1) badge |
+| Trend detection per numeric column | ✅ | scikit-learn LinearRegression slope across rows (row order is the time axis, with a note that this only means something when rows are in time order) — Increasing / Stable / Decreasing / Volatile (R² < 0.1) badge |
 | Trend chart | ✅ | Recharts line chart with direction label |
 
 ---
@@ -103,7 +103,7 @@
 | Feature | Status | Notes |
 |---|---|---|
 | Inline cell editing | ✅ | Click any cell to edit |
-| Undo (Ctrl+Z) | ✅ | Last 50 edits |
+| Undo (Ctrl+Z) | ✅ | Last 50 edits; returns a cell to exactly its previous state (an undone edit is no longer counted as unsaved) |
 | Redo (Ctrl+Y) | ✅ | Last 50 edits |
 | Save edits | ✅ | Persisted to dataset as a new version |
 | Draft autosave | ✅ | Unsaved edits (cells, rows, column renames) kept in the browser; survive refresh/close |
@@ -169,7 +169,7 @@
 |---|---|---|
 | Guided workflow cards (all 5 tabs) | ✅ | Indigo info card at top of each workspace tab |
 | Landing page (hero, features, contact) | ✅ | |
-| Contact form with success feedback | ✅ | Client-side with green success banner |
+| Contact form | ✅ | Opens the visitor's email app with the message filled in, addressed to the team email (there is no mail server, so nothing claims to be sent) |
 | React Error Boundary (all tabs) | ✅ | Crash recovery — shows error + "Try again" button |
 | OCR file-type callout on dashboard | ✅ | Highlights PNG/JPG image support |
 | Zero TypeScript errors | ✅ | tsc --noEmit passes clean |

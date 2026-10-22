@@ -22,15 +22,20 @@ const featureCards = [
   },
 ];
 
+const CONTACT_EMAIL = "TeamRazCapstone@gmail.com";
+
 export default function Home() {
   const [contactForm, setContactForm] = useState({ name: '', email: '', message: '' });
-  const [contactSent, setContactSent] = useState(false);
+  const [contactOpened, setContactOpened] = useState(false);
 
+  // There is no mail server: the form opens the visitor's own email app with the
+  // message filled in, so nothing claims to be sent until they send it themselves.
   function handleContactSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setContactSent(true);
-    setContactForm({ name: '', email: '', message: '' });
-    setTimeout(() => setContactSent(false), 6000);
+    const subject = `Smartalyze inquiry from ${contactForm.name}`;
+    const body = `${contactForm.message}\n\nFrom: ${contactForm.name} <${contactForm.email}>`;
+    window.location.href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    setContactOpened(true);
   }
 
   return (
@@ -132,16 +137,18 @@ export default function Home() {
             </p>
             <div className="mt-6 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5">
               <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">Email</p>
-              <p className="mt-2 text-lg font-semibold text-slate-950">TeamRazCapstone@gmail.com</p>
+              <a href={`mailto:${CONTACT_EMAIL}`} className="mt-2 block text-lg font-semibold text-slate-950 hover:text-indigo-700">{CONTACT_EMAIL}</a>
             </div>
           </div>
 
           <form onSubmit={handleContactSubmit} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h3 className="text-xl font-semibold text-slate-950">Send a message</h3>
+            <h3 className="text-xl font-semibold text-slate-950">Write a message</h3>
+            <p className="mt-1 text-sm text-slate-500">This opens your email app with your message ready to send to {CONTACT_EMAIL}.</p>
 
-            {contactSent && (
-              <div className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
-                Message received! We&apos;ll get back to you soon.
+            {contactOpened && (
+              <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800" role="status">
+                Your email app should now be open with the message filled in. Press <strong>Send</strong> there to reach us.
+                If nothing opened, email us directly at {CONTACT_EMAIL}.
               </div>
             )}
 
@@ -164,7 +171,7 @@ export default function Home() {
                   value={contactForm.email}
                   onChange={e => setContactForm(f => ({ ...f, email: e.target.value }))}
                   className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-indigo-500"
-                  placeholder="PutNameHereBruh@example.com"
+                  placeholder="you@example.com"
                 />
               </label>
               <label className="block">
@@ -178,7 +185,7 @@ export default function Home() {
                 />
               </label>
               <button type="submit" className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white transition hover:bg-indigo-500">
-                Send
+                Open in my email app
               </button>
             </div>
           </form>

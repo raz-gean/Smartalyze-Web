@@ -701,9 +701,9 @@ export function ExploreTab(props: ExploreTabProps) {
 
     function directionLabel(dir: string) {
       const map: Record<string, string> = {
-        increasing: "Going up over time",
-        decreasing: "Going down over time",
-        stable: "Relatively flat — little change over time",
+        increasing: "Going up from first to last row",
+        decreasing: "Going down from first to last row",
+        stable: "Relatively flat — little change across rows",
         volatile: "High variation — no clear direction",
       };
       return map[dir] ?? dir;
@@ -714,11 +714,19 @@ export function ExploreTab(props: ExploreTabProps) {
         <div className="rounded-2xl border border-violet-100 bg-violet-50/60 p-4">
           <p className="text-sm font-semibold text-violet-800">Trend Analysis</p>
           <p className="mt-1 text-xs text-slate-600 leading-relaxed">
-            Select a numeric column to detect how values change across rows using linear regression.{" "}
+            Select a numeric column to see how its values change from the first row to the last, using linear regression.{" "}
             <span className="text-slate-400">
               A straight trend line shows the underlying direction and smooths out noise.
             </span>
           </p>
+        </div>
+
+        {/* Trends here use row order as the time axis; say so, so a customer list or survey
+            isn't read as "going up over time". */}
+        <div role="note" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <strong>Rows are read in their current order.</strong> A trend is only meaningful if each row is a point in time and
+          the rows are already sorted by time (for example, one row per day or month). For a list such as customers or survey
+          answers, the direction has no meaning. To forecast by date, use the <strong>Predict</strong> tab and pick a Date column.
         </div>
 
         {numericCols.length === 0 ? (
@@ -864,7 +872,7 @@ export function ExploreTab(props: ExploreTabProps) {
       <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-4">
         <p className="text-sm font-semibold text-indigo-800">How to use this tab</p>
         <p className="text-sm text-indigo-700 mt-0.5">
-          Use <strong>Column Analysis</strong> to see statistics (mean, min, max) for each column and explore distributions. Switch to <strong>Aggregation</strong> to group your data and compute totals or averages. Use <strong>Trends</strong> to detect patterns over time.
+          Use <strong>Column Analysis</strong> to see statistics (mean, min, max) for each column and explore distributions. Switch to <strong>Aggregation</strong> to group your data and compute totals or averages. Use <strong>Trends</strong> to see whether a column goes up or down across your rows.
         </p>
       </div>
       <div className="flex flex-wrap gap-2">

@@ -18,12 +18,16 @@ import { IssuesPanel } from "./EditTab/IssuesPanel";
 
 type Row = Record<string, unknown>;
 
+// wasEdited: the cell already held an unsaved edit before this change, so undo restores
+// oldValue as that edit; otherwise undo removes the edit and the saved value shows again.
+type CellChange = { rowIndex: number; colName: string; oldValue: unknown; newValue: unknown; wasEdited: boolean };
+
 type EditOperation =
-  | { type: "cell_edit"; rowIndex: number; colName: string; oldValue: unknown; newValue: unknown }
+  | ({ type: "cell_edit" } & CellChange)
   | { type: "row_delete"; rowIndex: number; row: Row }
   | { type: "row_insert"; rowIndex: number }
   | { type: "col_rename"; oldName: string; newName: string }
-  | { type: "bulk_suggest"; changes: Array<{ rowIndex: number; colName: string; oldValue: unknown; newValue: unknown }> }
+  | { type: "bulk_suggest"; changes: CellChange[] }
   | { type: "col_delete"; colName: string; colIndex: number; deletedEdits: Array<[string, unknown]> }
   | { type: "col_insert"; colName: string; colIndex: number };
 
@@ -468,26 +472,24 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
     setRedoStack([]);
   }
 
+  // Side effects stay outside the state updaters: React may run an updater twice (StrictMode),
+  // which would push the same operation twice and show two toasts.
   function handleUndo() {
-    setUndoStack((stack) => {
-      if (stack.length === 0) return stack;
-      const op = stack[stack.length - 1];
-      applyReverse(op);
-      setRedoStack((r) => [...r, op]);
-      toast.info(`Undone: ${describeOperation(op)}`);
-      return stack.slice(0, -1);
-    });
+    const op = undoStack[undoStack.length - 1];
+    if (!op) return;
+    applyReverse(op);
+    setUndoStack((stack) => stack.slice(0, -1));
+    setRedoStack((r) => [...r, op]);
+    toast.info(`Undone: ${describeOperation(op)}`);
   }
 
   function handleRedo() {
-    setRedoStack((stack) => {
-      if (stack.length === 0) return stack;
-      const op = stack[stack.length - 1];
-      applyForward(op);
-      setUndoStack((u) => [...u, op]);
-      toast.info(`Redone: ${describeOperation(op)}`);
-      return stack.slice(0, -1);
-    });
+    const op = redoStack[redoStack.length - 1];
+    if (!op) return;
+    applyForward(op);
+    setRedoStack((stack) => stack.slice(0, -1));
+    setUndoStack((u) => [...u, op]);
+    toast.info(`Redone: ${describeOperation(op)}`);
   }
 
   function applyReverse(op: EditOperation) {
@@ -495,11 +497,8 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
       setEditedCells((m) => {
         const next = new Map(m);
         const key = `${op.rowIndex}::${op.colName}`;
-        if (op.oldValue === null || op.oldValue === undefined) {
-          next.delete(key);
-        } else {
-          next.set(key, op.oldValue);
-        }
+        if (op.wasEdited) next.set(key, op.oldValue);
+        else next.delete(key);
         return next;
       });
     } else if (op.type === "row_delete") {
@@ -513,8 +512,8 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
         const next = new Map(m);
         for (const c of op.changes) {
           const key = `${c.rowIndex}::${c.colName}`;
-          if (c.oldValue === null || c.oldValue === undefined) { next.delete(key); }
-          else { next.set(key, c.oldValue); }
+          if (c.wasEdited) next.set(key, c.oldValue);
+          else next.delete(key);
         }
         return next;
       });
@@ -651,8 +650,9 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
   // ── Cell commit ──────────────────────────────────────────────────────────
   function handleCellCommit(rowIndex: number, colName: string, newValue: unknown) {
     const key = `${rowIndex}::${colName}`;
-    const oldValue = editedCells.has(key) ? editedCells.get(key) : rows[rowIndex]?.[colName] ?? insertedRows.get(rowIndex)?.[colName] ?? null;
-    const op: EditOperation = { type: "cell_edit", rowIndex, colName, oldValue, newValue };
+    const wasEdited = editedCells.has(key);
+    const oldValue = wasEdited ? editedCells.get(key) : rows[rowIndex]?.[colName] ?? insertedRows.get(rowIndex)?.[colName] ?? null;
+    const op: EditOperation = { type: "cell_edit", rowIndex, colName, oldValue, newValue, wasEdited };
 
     setEditedCells((m) => {
       const next = new Map(m);
@@ -686,12 +686,13 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
 
   // ── Apply all suggestions ────────────────────────────────────────────────
   function handleApplyAllSuggestions() {
-    const changes: Array<{ rowIndex: number; colName: string; oldValue: unknown; newValue: unknown }> = [];
+    const changes: CellChange[] = [];
     pendingSuggestions.forEach((suggested, key) => {
       const [riStr, colName] = key.split("::");
       const rowIndex = Number(riStr);
-      const oldValue = editedCells.get(key) ?? rows[rowIndex]?.[colName] ?? null;
-      changes.push({ rowIndex, colName, oldValue, newValue: suggested });
+      const wasEdited = editedCells.has(key);
+      const oldValue = wasEdited ? editedCells.get(key) : rows[rowIndex]?.[colName] ?? null;
+      changes.push({ rowIndex, colName, oldValue, newValue: suggested, wasEdited });
     });
     if (changes.length === 0) return;
     setEditedCells((m) => {
@@ -704,13 +705,14 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
 
   // ── Apply suggestions for a single column ───────────────────────────────
   function handleApplyColumnSuggestions(colName: string) {
-    const changes: Array<{ rowIndex: number; colName: string; oldValue: unknown; newValue: unknown }> = [];
+    const changes: CellChange[] = [];
     pendingSuggestions.forEach((suggested, key) => {
       const [riStr, col] = key.split("::");
       if (col !== colName) return;
       const rowIndex = Number(riStr);
-      const oldValue = editedCells.get(key) ?? rows[rowIndex]?.[colName] ?? null;
-      changes.push({ rowIndex, colName, oldValue, newValue: suggested });
+      const wasEdited = editedCells.has(key);
+      const oldValue = wasEdited ? editedCells.get(key) : rows[rowIndex]?.[colName] ?? null;
+      changes.push({ rowIndex, colName, oldValue, newValue: suggested, wasEdited });
     });
     if (changes.length === 0) return;
     setEditedCells((m) => {
