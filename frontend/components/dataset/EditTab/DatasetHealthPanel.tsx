@@ -39,7 +39,7 @@ export function DatasetHealthPanel({
     <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         {/* Completeness score */}
-        <div className="flex items-center gap-3 min-w-[160px]">
+        <div className="flex items-center gap-3 min-w-40">
           <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 ${completenessColor.ring}`}>
             {loading ? (
               <span className="text-xs text-slate-400">…</span>
