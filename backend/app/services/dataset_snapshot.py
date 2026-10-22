@@ -71,14 +71,25 @@ def build_summary(frame: pd.DataFrame, *, size_bytes: int = 0) -> dict:
     }
 
 
+def csv_size_bytes(frame: pd.DataFrame) -> int:
+    """Size of the data as a CSV file (same bytes as the CSV export), shown for saved versions."""
+    return len(frame.to_csv(index=False).encode("utf-8"))
+
+
 def build_snapshot(
     frame: pd.DataFrame,
     *,
     source_name: str,
     file_type: str,
-    size_bytes: int,
+    size_bytes: int | None = None,
 ) -> dict:
-    """Build a snapshot dict from a DataFrame (records + preview + metadata)."""
+    """Build a snapshot dict from a DataFrame (records + preview + metadata).
+
+    size_bytes is the uploaded file's size for a new upload; when omitted (cleaned or
+    edited versions, which have no file of their own) it is the size as a CSV file.
+    """
+    if size_bytes is None:
+        size_bytes = csv_size_bytes(frame)
     summary = build_summary(frame, size_bytes=size_bytes)
     return {
         "source_name": source_name,

@@ -198,7 +198,9 @@ def detect_categorical_variants(series: pd.Series, column: str) -> CategoryStand
     # like ORD-2024-1051, ORD-2024-1052, … (~0.92 fuzzy similarity) get wrongly
     # clustered as variants of one category. Genuine categoricals repeat heavily,
     # so their uniqueness ratio stays far below this threshold.
-    distinct = int(non_null.astype(str).nunique())
+    # Uniqueness is counted after ignoring case/spacing, so a small column such as
+    # Male, male, M, Female, F (5 raw values, 4 labels) is still checked.
+    distinct = int(non_null.map(_normalize_label).nunique())
     if len(non_null) >= 5 and distinct / len(non_null) >= 0.9:
         return None
 

@@ -45,6 +45,12 @@ def test_categorical_variants_skips_high_cardinality_names():
     assert detect_categorical_variants(names, "name") is None
 
 
+def test_categorical_variants_skips_sequential_ids():
+    # Near-identical IDs are distinct records, not spellings of one category.
+    ids = pd.Series([f"ORD-2024-{n}" for n in range(1051, 1061)])
+    assert detect_categorical_variants(ids, "order_id") is None
+
+
 def test_categorical_variants_ambiguous_abbrev_not_merged():
     # "M" is a prefix of both "Male" and "Married" -> must NOT auto-merge.
     series = pd.Series(["Male", "Married", "M", "Male", "Married"])

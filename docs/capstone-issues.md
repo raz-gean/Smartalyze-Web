@@ -38,13 +38,13 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 |---|---|---|---|
 | S1 | Make Groq the default AI provider (`AI_PROVIDER=groq`, `GROQ_API_KEY` in `backend/.env`); keep Ollama and Gemini as alternatives | Matches the document (A1) | ✅ Done (model `openai/gpt-oss-120b`) |
 | S2 | Forecast band → 95% prediction interval | Makes "confidence/prediction interval" true (A2); statistician item | ✅ Done: predicted ± t(0.975, n−2) · s · √(1 + 1/n + (x₀ − x̄)²/Sxx); labelled "Likely range (95%)"; tests in `tests/test_prediction_interval.py`; validation pack 51/51 matched, coverage simulation 94.5% |
-| S3 | Trend analysis uses scikit-learn `LinearRegression` instead of NumPy `polyfit` (identical results) | p.67 says trends use scikit-learn; today only Predict does | ⬜ |
-| S4 | Edit tab "Suggested fixes" never appear: it reads `details.fill_value`, which the scan doesn't send, and matches issue kind `"outlier"` while the scan sends `"outliers"` (health panel says "No outliers" next to an outlier issue) | Visible bug | ⬜ |
-| S5 | Edit tab column badges show raw type names (`datetime_string`, `categorical`) | Jargon for non-technical users | ⬜ |
+| S3 | Trend analysis uses scikit-learn `LinearRegression` instead of NumPy `polyfit` (identical results) | p.67 says trends use scikit-learn; today only Predict does | ✅ Done (Oct 22): `trend_analysis` uses `LinearRegression`; results unchanged (validation pack 51/51) |
+| S4 | Edit tab "Suggested fixes" never appear: it reads `details.fill_value`, which the scan doesn't send, and matches issue kind `"outlier"` while the scan sends `"outliers"` (health panel says "No outliers" next to an outlier issue) | Visible bug | ✅ Done (Oct 22): suggests the same fix as Prepare (smart fill, else median / most common value); only cells outside the IQR fences are marked; "Mark duplicates" button fixed (kind `duplicates`) |
+| S5 | Edit tab column badges show raw type names (`datetime_string`, `categorical`) | Jargon for non-technical users | ✅ Done (Oct 22): badges 123 / Aa / date / T/F with plain hover tips |
 | S6 | Predict's "Column to forecast" lists every column until the Explore tab has been opened once | Confusing list (default is correct) | ✅ Done (stats load on Predict too) |
-| S7 | History shows times 8 hours off (UTC shown as local time) | Visible bug | ⬜ |
-| S8 | File size shows "0 B" after an Edit save, or jumps after other saves | Visible bug | ⬜ |
-| S9 | Older failing test `test_analyze_quality_combined` (spelling-variant grouping on a mixed dataset) | Test suite is 52/53 | ⬜ |
+| S7 | History shows times 8 hours off (UTC shown as local time) | Visible bug | ✅ Done (Oct 22): API sends timestamps as UTC ("…Z"); also fixes dashboard dates and "member since" |
+| S8 | File size shows "0 B" after an Edit save, or jumps after other saves | Visible bug | ✅ Done (Oct 22): saved versions get their size as a CSV file (cleaning used pandas' in-memory size, Edit used 0); uploads keep the uploaded file's size |
+| S9 | Older failing test `test_analyze_quality_combined` (spelling-variant grouping on a mixed dataset) | Test suite is 52/53 | ✅ Done (Oct 22): the ID guard now counts unique labels ignoring case/spacing, so a small gender column is checked again; new test keeps IDs skipped |
 | S10 | AI answer quality (Groq): answers sometimes cut off (512-token limit with a reasoning model); markdown shows as raw `**`; AI names buttons Smartalyze doesn't have; adds `$` the data doesn't have; says IQR fences hold "about 95%" of data (wrong); first Detect summary can miss the outliers (context built before anomaly results arrive) | Visible in Ask AI / AI Analysis at the defense | ✅ Done (Phase 1) |
 
 ---
@@ -68,7 +68,7 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 | D6 | FR 2, p.47 | Upload, organize, delete; no rename | Add renaming datasets (panel item; Scope p.8 mentions it). | ⬜ |
 | D7 | Objective 6, p.7; DFD 4.0, p.54 | Export formats CSV, Excel, JSON | Add **Parquet** (the system exports it), or leave it out on purpose. | ⬜ |
 | D8 | FR 7 / FR 9 / Technologies | Not mentioned | Add the **correlation heatmap** (Pearson and Spearman), the **dataset health score**, and **keeping leading-zero codes** (zip codes, IDs) as text. | ⬜ |
-| D9 | Table 9, p.78 | All results "TBD" | Fill with real results (as of Oct 22, 2026): automated tests 67/68 passed; statistical validation 51/51 checks matched NumPy/SciPy/statsmodels; end-to-end browser tests passed. Re-check the numbers after the UI freeze. | ⬜ |
+| D9 | Table 9, p.78 | All results "TBD" | Fill with real results (as of Oct 22, 2026): automated tests 71/71 passed; statistical validation 51/51 checks matched NumPy/SciPy/statsmodels; end-to-end browser tests passed. Re-check the numbers after the UI freeze. | ⬜ |
 
 ### Wrong details
 
@@ -77,7 +77,7 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 | D10 | Data Dictionary, Table 3 Users, pp.56–57 | Key column named `user_id`; `password_hash` marked **Unique**; `avatar` missing | Column is `id`; **`username`** is unique (not `password_hash`); add `avatar` (Text, optional profile picture, max 1 MB). | ⬜ |
 | D11 | Methodology, p.38 | "a locally installed language model for AI assistance" | "a cloud-based language model (Groq)". Optionally name the model `openai/gpt-oss-120b` and note that the Llama model was retired by Groq. | ⬜ |
 | D12 | Prediction, p.69 | "Confidence bands based on regression residual error"; "Confidence intervals" | S2 is done. Replace with: "Each forecast includes a 95% prediction interval, the range in which a single future value is expected to fall 95% of the time if the linear trend continues. It is computed as ŷ ± t(0.975, n−2) · s · √(1 + 1/n + (x₀ − x̄)²/Sxx), so it widens for forecasts further from the data." | ⬜ |
-| D13 | Trend Analysis, p.67 | Trend analysis "uses the Linear Regression model from Scikit-learn" | True once S3 is done; otherwise "least-squares linear regression (NumPy)". | ⬜ |
+| D13 | Trend Analysis, p.67 | Trend analysis "uses the Linear Regression model from Scikit-learn" | S3 is done, so p.67 is now correct. No change needed. | ✅ |
 | D14 | Data Dictionary, Table 4 AuthSessions, p.57 | `id` primary key missing | Add `id` (Integer, Primary Key). | ⬜ |
 | D15 | Gantt chart, p.41; cover, p.1 | Gantt chart ends **May 2026**, cover says **June 2026**; work continues into November | Align the dates, or add a revised schedule. | ⬜ |
 | D16 | References, p.83 | "Cited by: 76" and "Cited by: 12" still in entries [3] and [4] | Delete all "Cited by: XX". | ⬜ |
@@ -146,13 +146,13 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 | A3 | Use case diagram completeness | Team | ❓ |
 | S1 | Groq as default provider | Sys | ✅ |
 | S2 | 95% prediction interval | Sys | ✅ |
-| S3 | Trend analysis via scikit-learn | Sys | ⬜ |
-| S4 | Edit tab suggested fixes / outlier count | Sys | ⬜ |
-| S5 | Plain-language type badges | Sys | ⬜ |
+| S3 | Trend analysis via scikit-learn | Sys | ✅ |
+| S4 | Edit tab suggested fixes / outlier count | Sys | ✅ |
+| S5 | Plain-language type badges | Sys | ✅ |
 | S6 | Predict column list | Sys | ✅ Done (stats load on Predict too) |
-| S7 | History time zone | Sys | ⬜ |
-| S8 | File size display | Sys | ⬜ |
-| S9 | Failing older test | Sys | ⬜ |
+| S7 | History time zone | Sys | ✅ |
+| S8 | File size display | Sys | ✅ |
+| S9 | Failing older test | Sys | ✅ |
 | S10 | AI answer quality (Groq) | Sys | ✅ Done (Phase 1) |
 | D1 | Scope: remove "predictive analysis" | Doc | ⬜ |
 | D2 | "Machine learning" wording for IQR | Doc | ⬜ |
@@ -166,7 +166,7 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 | D10 | Users table: `id`, unique `username`, `avatar` | Doc | ⬜ |
 | D11 | p.38 "locally installed language model" | Doc | ⬜ |
 | D12 | Prediction interval wording | Doc | ⬜ (wording ready) |
-| D13 | Trend analysis library | Doc | ⬜ |
+| D13 | Trend analysis library | Doc | ✅ (no change needed) |
 | D14 | AuthSessions `id` | Doc | ⬜ |
 | D15 | Gantt chart vs cover date | Doc | ⬜ |
 | D16 | Remove "Cited by" | Doc | ⬜ |

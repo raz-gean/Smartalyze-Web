@@ -218,6 +218,27 @@ def test_explore_and_detect_views_do_not_treat_zip_codes_as_numbers():
     assert kinds["Ref"] != "numeric" and kinds["Sales"] == "numeric", kinds
 
 
+def test_saved_versions_get_their_size_as_a_csv_file():
+    frame = pd.DataFrame({"Name": ["Ana", "Ben"], "Sales": [100, 250]})
+    snapshot = build_snapshot(frame, source_name="s.csv", file_type="csv")  # cleaned/edited: no file size given
+    expected = len(snapshot_to_export_bytes(snapshot, export_format="csv")[0])  # same as the CSV download
+    assert snapshot["size_bytes"] == expected and snapshot["summary"]["size_bytes"] == expected, (snapshot["summary"], expected)
+    uploaded = build_snapshot(frame, source_name="s.csv", file_type="csv", size_bytes=999)  # upload keeps file size
+    assert uploaded["summary"]["size_bytes"] == 999
+
+
+def test_timestamps_are_sent_as_utc():
+    from datetime import datetime
+
+    from app.schemas.dataset import DatasetVersionSummary
+
+    summary = DatasetVersionSummary(
+        id=1, dataset_id=1, version_number=1, operation_type="manual_edit",
+        created_at=datetime(2026, 10, 22, 3, 0),  # stored naive, in UTC
+    )
+    assert json.loads(summary.model_dump_json())["created_at"] == "2026-10-22T03:00:00Z"
+
+
 def _run_all():
     tests = [fn for name, fn in sorted(globals().items()) if name.startswith("test_") and callable(fn)]
     passed = 0

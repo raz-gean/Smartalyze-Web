@@ -3,8 +3,9 @@
 These models define what the frontend is allowed to send/receive for auth endpoints.
 """
 
-from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.schemas.common import UTCDateTime
 
 
 class RegisterRequest(BaseModel):
@@ -41,7 +42,7 @@ class UserRead(BaseModel):
 
     id: int
     username: str
-    created_at: datetime
+    created_at: UTCDateTime
     avatar: str | None = None
 
 

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { toast } from "sonner";
 import { detectCleaningIssues, getDatasetRows, saveManualEdit } from "@/lib/api";
-import type { CleaningIssue, DatasetWorkspace } from "@/lib/api";
+import type { CleanDetectResponse, CleaningIssue, DatasetWorkspace, OutlierColumnSummary } from "@/lib/api";
 import { columnNames, orderColumns } from "@/lib/columnOrder";
 import { readEditDraft, removeEditDraft, writeEditDraft } from "@/lib/editDraft";
 import type { EditDraft } from "@/lib/editDraft";
@@ -52,23 +52,128 @@ export interface EditTabProps {
 
 // ─── Type badge helper ────────────────────────────────────────────────────────
 
+// Column types from the data scan, shown as a short badge with a plain-language tip.
+const TYPE_BADGES: Record<string, { label: string; tip: string; cls: string }> = {
+  numeric:         { label: "123",  tip: "Numbers",                         cls: "bg-blue-50 text-blue-600 border-blue-200" },
+  numeric_string:  { label: "123",  tip: "Numbers saved as text",           cls: "bg-amber-50 text-amber-700 border-amber-200" },
+  text:            { label: "Aa",   tip: "Text",                            cls: "bg-slate-100 text-slate-500 border-slate-200" },
+  categorical:     { label: "Aa",   tip: "Categories (repeated labels)",    cls: "bg-slate-100 text-slate-500 border-slate-200" },
+  datetime:        { label: "date", tip: "Dates",                           cls: "bg-violet-50 text-violet-600 border-violet-200" },
+  datetime_string: { label: "date", tip: "Dates saved as text",             cls: "bg-amber-50 text-amber-700 border-amber-200" },
+  boolean:         { label: "T/F",  tip: "Yes / No values",                 cls: "bg-emerald-50 text-emerald-600 border-emerald-200" },
+};
+const UNKNOWN_BADGE = { label: "?", tip: "Type not detected (column is empty)", cls: "bg-slate-100 text-slate-400 border-slate-200" };
+
 function TypeBadge({ type }: { type: string }) {
-  const map: Record<string, { label: string; cls: string }> = {
-    numeric:  { label: "123",  cls: "bg-blue-50 text-blue-600 border-blue-200" },
-    float:    { label: "1.0",  cls: "bg-blue-50 text-blue-600 border-blue-200" },
-    integer:  { label: "123",  cls: "bg-blue-50 text-blue-600 border-blue-200" },
-    text:     { label: "Aa",   cls: "bg-slate-100 text-slate-500 border-slate-200" },
-    string:   { label: "Aa",   cls: "bg-slate-100 text-slate-500 border-slate-200" },
-    datetime: { label: "date", cls: "bg-violet-50 text-violet-600 border-violet-200" },
-    date:     { label: "date", cls: "bg-violet-50 text-violet-600 border-violet-200" },
-    boolean:  { label: "T/F",  cls: "bg-emerald-50 text-emerald-600 border-emerald-200" },
-  };
-  const t = map[type.toLowerCase()] ?? { label: type, cls: "bg-slate-100 text-slate-400 border-slate-200" };
+  const t = TYPE_BADGES[type.toLowerCase()] ?? UNKNOWN_BADGE;
   return (
-    <span className={`inline-block rounded border px-1 text-[10px] font-medium leading-4 ${t.cls}`}>
+    <span
+      title={t.tip}
+      aria-label={t.tip}
+      className={`inline-block rounded border px-1 text-[10px] font-medium leading-4 ${t.cls}`}
+    >
       {t.label}
     </span>
   );
+}
+
+// ─── Suggested-fix helpers ────────────────────────────────────────────────────
+
+type FillPlan = { count: number; description: string };
+
+const isBlank = (value: unknown) => value === null || value === undefined || value === "";
+// Same grouping key as smart fill on the server: "Panabo", "panabo " and "PANABO" match.
+const normalizeKey = (value: unknown) => String(value).trim().toLowerCase();
+
+function mostCommon(values: unknown[]): unknown {
+  const counts = new Map<string, { value: unknown; n: number }>();
+  for (const value of values) {
+    const entry = counts.get(String(value));
+    if (entry) entry.n += 1;
+    else counts.set(String(value), { value, n: 1 });
+  }
+  // Ties go to the first value in sorted order, like pandas mode().
+  const sorted = [...counts.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  let best: { value: unknown; n: number } | undefined;
+  for (const [, entry] of sorted) if (!best || entry.n > best.n) best = entry;
+  return best?.value;
+}
+
+function median(values: number[]): number {
+  const s = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+/**
+ * Suggest the same fix the Prepare tab recommends for each empty cell: smart fill
+ * (the usual value for the related column) when the scan found one, otherwise the
+ * median for numbers or the most common value for text.
+ */
+function buildFillSuggestions(rows: Row[], detection: CleanDetectResponse) {
+  const suggestions = new Map<string, unknown>();
+  const plans: Record<string, FillPlan> = {};
+
+  for (const [col, missing] of Object.entries(detection.missing_values ?? {})) {
+    if (!missing) continue;
+    const blanks = rows.flatMap((row, idx) => (isBlank(row[col]) ? [idx] : []));
+    const known = rows.map((row) => row[col]).filter((value) => !isBlank(value));
+    if (blanks.length === 0 || known.length === 0) continue;
+
+    const pattern = (detection.pattern_suggestions ?? [])
+      .filter((p) => p.target_column === col)
+      .sort((a, b) => b.weighted_confidence - a.weighted_confidence)[0];
+    if (pattern) {
+      const valuesByKey = new Map<string, unknown[]>();
+      for (const row of rows) {
+        const key = row[pattern.key_column];
+        if (isBlank(key) || isBlank(row[col])) continue;
+        const group = valuesByKey.get(normalizeKey(key));
+        if (group) group.push(row[col]);
+        else valuesByKey.set(normalizeKey(key), [row[col]]);
+      }
+      let count = 0;
+      for (const idx of blanks) {
+        const key = rows[idx][pattern.key_column];
+        const group = isBlank(key) ? undefined : valuesByKey.get(normalizeKey(key));
+        if (!group) continue;
+        suggestions.set(`${idx}::${col}`, mostCommon(group));
+        count += 1;
+      }
+      if (count > 0) {
+        plans[col] = { count, description: `Smart fill: the usual ${col} for each ${pattern.key_column}` };
+        continue;
+      }
+    }
+
+    const numbers = known.map(Number);
+    const type = detection.column_types?.[col];
+    let fill: unknown;
+    let description: string;
+    if ((type === "numeric" || type === "numeric_string") && numbers.every(Number.isFinite)) {
+      fill = median(numbers);
+      description = `Fill with the median (${(fill as number).toLocaleString(undefined, { maximumFractionDigits: 2 })})`;
+    } else {
+      fill = mostCommon(known);
+      description = `Fill with the most common value ("${String(fill)}")`;
+    }
+    blanks.forEach((idx) => suggestions.set(`${idx}::${col}`, fill));
+    plans[col] = { count: blanks.length, description };
+  }
+  return { suggestions, plans };
+}
+
+/** Cells outside the IQR fences found by the data scan (same rule as the Detect tab). */
+function findOutlierCells(rows: Row[], outliers: OutlierColumnSummary[]): Set<string> {
+  const cells = new Set<string>();
+  for (const { column, lower_fence, upper_fence } of outliers) {
+    rows.forEach((row, idx) => {
+      if (isBlank(row[column])) return;
+      const n = Number(row[column]);
+      if (Number.isFinite(n) && (n < lower_fence || n > upper_fence)) cells.add(`${idx}::${column}`);
+    });
+  }
+  return cells;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -109,6 +214,7 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
 
   // ── Suggested fixes (from the rule-based data scan) ───────────────────────
   const [suggestions, setSuggestions] = useState<Map<string, unknown>>(new Map());
+  const [fillPlans, setFillPlans] = useState<Record<string, FillPlan>>({});
   const [duplicateRowIndices, setDuplicateRowIndices] = useState<Set<number>>(new Set());
   const [outlierCells, setOutlierCells] = useState<Set<string>>(new Set());
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
@@ -137,6 +243,25 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
   useEffect(() => { onDirtyChange(isDirty); }, [isDirty, onDirtyChange]);
   // Leaving the tab unmounts the editor; its edits are no longer on screen (the draft keeps them).
   useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
+
+  // Suggested fixes not yet applied: a cell the user has filled or edited drops out
+  // (Undo brings it back), so the fill buttons and counts reflect what is left to do.
+  const pendingSuggestions = useMemo(
+    () => new Map([...suggestions].filter(([key]) => !editedCells.has(key))),
+    [suggestions, editedCells],
+  );
+  const pendingFillPlans = useMemo(() => {
+    const counts: Record<string, number> = {};
+    pendingSuggestions.forEach((_, key) => {
+      const col = key.slice(key.indexOf("::") + 2);
+      counts[col] = (counts[col] ?? 0) + 1;
+    });
+    return Object.fromEntries(
+      Object.entries(fillPlans)
+        .filter(([col]) => counts[col])
+        .map(([col, plan]) => [col, { ...plan, count: counts[col] }]),
+    );
+  }, [pendingSuggestions, fillPlans]);
 
   // ── Search debounce ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -282,30 +407,9 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
         const result = await detectCleaningIssues(datasetId, token);
         if (cancelled) return;
 
-        const sugMap = new Map<string, unknown>();
+        const { suggestions: sugMap, plans } = buildFillSuggestions(rows, result);
+        const outlierSet = findOutlierCells(rows, result.outliers ?? []);
         const dupSet = new Set<number>();
-        const outlierSet = new Set<string>();
-
-        // Missing value suggestions: use column mean/mode from issues
-        for (const issue of result.issues) {
-          if (issue.kind === "missing_values" && issue.column) {
-            const colName = issue.column;
-            const fillVal = issue.details?.fill_value ?? issue.details?.suggested_value ?? null;
-            if (fillVal !== null && fillVal !== undefined) {
-              rows.forEach((row, idx) => {
-                const val = row[colName];
-                if (val === null || val === undefined || val === "") {
-                  sugMap.set(`${idx}::${colName}`, fillVal);
-                }
-              });
-            }
-          }
-          if (issue.kind === "outlier" && issue.column) {
-            rows.forEach((_, idx) => {
-              outlierSet.add(`${idx}::${issue.column}`);
-            });
-          }
-        }
 
         // Duplicate rows
         if (result.duplicates > 0) {
@@ -321,6 +425,7 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
         }
 
         setSuggestions(sugMap);
+        setFillPlans(plans);
         setDuplicateRowIndices(dupSet);
         setOutlierCells(outlierSet);
         setMissingValuesPerCol(result.missing_values ?? {});
@@ -575,7 +680,7 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
   // ── Apply all suggestions ────────────────────────────────────────────────
   function handleApplyAllSuggestions() {
     const changes: Array<{ rowIndex: number; colName: string; oldValue: unknown; newValue: unknown }> = [];
-    suggestions.forEach((suggested, key) => {
+    pendingSuggestions.forEach((suggested, key) => {
       const [riStr, colName] = key.split("::");
       const rowIndex = Number(riStr);
       const oldValue = editedCells.get(key) ?? rows[rowIndex]?.[colName] ?? null;
@@ -593,7 +698,7 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
   // ── Apply suggestions for a single column ───────────────────────────────
   function handleApplyColumnSuggestions(colName: string) {
     const changes: Array<{ rowIndex: number; colName: string; oldValue: unknown; newValue: unknown }> = [];
-    suggestions.forEach((suggested, key) => {
+    pendingSuggestions.forEach((suggested, key) => {
       const [riStr, col] = key.split("::");
       if (col !== colName) return;
       const rowIndex = Number(riStr);
@@ -841,7 +946,7 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
         missingValuesPerCol={missingValuesPerCol}
         duplicates={duplicateRowIndices.size}
         outlierCount={outlierCells.size}
-        suggestionCount={suggestions.size}
+        suggestionCount={pendingSuggestions.size}
         loading={suggestionsLoading}
       />
 
@@ -849,7 +954,7 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
       <div inert={pendingDraft !== null} className={`space-y-3 ${pendingDraft ? "opacity-50" : ""}`}>
       <IssuesPanel
         issues={allIssues}
-        missingValuesPerCol={missingValuesPerCol}
+        fillPlans={pendingFillPlans}
         duplicates={duplicateRowIndices.size}
         duplicateRowCount={duplicateRowIndices.size}
         onFixMissingColumn={handleApplyColumnSuggestions}
@@ -871,7 +976,7 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
         onUndo={handleUndo}
         onRedo={handleRedo}
         onApplyAllSuggestions={handleApplyAllSuggestions}
-        suggestionCount={suggestions.size}
+        suggestionCount={pendingSuggestions.size}
         isDirty={isDirty}
         onSave={handleSave}
         onCancel={handleCancel}

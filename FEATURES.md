@@ -67,7 +67,7 @@
 |---|---|---|
 | Column Analysis | ✅ | dtype, null %, unique count, mean, median, mode, min, max |
 | Aggregation (group by + agg function) | ✅ | Sum, mean, count, min, max; rendered as bar chart |
-| Trend detection per numeric column | ✅ | Linear slope — Increasing / Stable / Decreasing / Volatile (R² < 0.1) badge |
+| Trend detection per numeric column | ✅ | scikit-learn LinearRegression slope — Increasing / Stable / Decreasing / Volatile (R² < 0.1) badge |
 | Trend chart | ✅ | Recharts line chart with direction label |
 
 ---
@@ -109,6 +109,8 @@
 | Draft autosave | ✅ | Unsaved edits (cells, rows, column renames) kept in the browser; survive refresh/close |
 | Restore or discard draft | ✅ | On return, user chooses "Restore edits" or "Discard"; drafts from an older version are cleared, never applied |
 | Leave-page warning | ✅ | Browser warns before closing/refreshing with unsaved edits |
+| Suggested fixes | ✅ | Empty cells show the same fix Prepare recommends (smart fill from a related column, else median for numbers / most common value for text); fill per column or all at once (undoable). Only cells outside the IQR fences are marked as outliers; duplicate rows can be marked for deletion |
+| Plain-language type badges | ✅ | 123 / Aa / date / T/F with a hover tip (e.g. "Numbers saved as text") instead of internal type names |
 | Row virtualization | ✅ | @tanstack/react-virtual for large datasets |
 
 ---
@@ -118,7 +120,8 @@
 | Feature | Status | Notes |
 |---|---|---|
 | Automatic snapshot on every operation | ✅ | JSONB stored in PostgreSQL |
-| Version history panel | ✅ | Shows all versions with timestamps |
+| Version history panel | ✅ | Shows all versions with timestamps in the viewer's local time (the API sends UTC) |
+| Dataset size | ✅ | Uploads show the uploaded file's size; cleaned/edited versions show their size as a CSV file |
 | Restore to any version | ✅ | One-click rollback |
 
 ---

@@ -751,7 +751,7 @@ def build_cleaning_result_snapshot(
     *,
     source_name: str,
     file_type: str,
-    size_bytes: int,
+    size_bytes: int | None = None,
 ) -> dict:
     """Build a JSON snapshot for a cleaned DataFrame (used as API output)."""
     return build_snapshot(

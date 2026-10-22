@@ -228,7 +228,8 @@ def trend_analysis(
             x = np.arange(len(values), dtype=float)
             col_labels = None
 
-        slope, intercept = np.polyfit(x, values, 1)
+        line = LinearRegression().fit(x.reshape(-1, 1), values)
+        slope, intercept = float(line.coef_[0]), float(line.intercept_)
 
         y_pred = slope * x + intercept
         ss_res = float(np.sum((values - y_pred) ** 2))

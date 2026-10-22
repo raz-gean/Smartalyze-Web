@@ -124,7 +124,6 @@ endpoint to replace the dataset or save as a new dataset.
         cleaned_frame,
         source_name=dataset.name,
         file_type=dataset.file_type,
-        size_bytes=int(cleaned_frame.memory_usage(index=True, deep=True).sum()),
     )
 
     cleaned_missing_values, cleaned_duplicates, cleaned_column_types, cleaned_issues, cleaned_findings = analyze_cleaning_frame(cleaned_frame)

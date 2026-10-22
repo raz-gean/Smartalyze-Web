@@ -5,7 +5,8 @@ import type { CleaningIssue } from "@/lib/api";
 
 interface IssuesPanelProps {
   issues: CleaningIssue[];
-  missingValuesPerCol: Record<string, number>;
+  // Suggested fill per column with missing values: how many cells it fills and how.
+  fillPlans: Record<string, { count: number; description: string }>;
   duplicates: number;
   duplicateRowCount: number;
   onFixMissingColumn: (colName: string) => void;
@@ -29,7 +30,7 @@ const SEVERITY_LABEL: Record<string, string> = {
 
 export function IssuesPanel({
   issues,
-  missingValuesPerCol,
+  fillPlans,
   duplicates,
   duplicateRowCount,
   onFixMissingColumn,
@@ -73,9 +74,8 @@ export function IssuesPanel({
         <div className="border-t border-slate-100 divide-y divide-slate-100">
           {sorted.map((issue, i) => {
             const col = issue.column;
-            const missingCount = col ? (missingValuesPerCol[col] ?? 0) : 0;
-            const showFillButton = issue.kind === "missing_values" && col && missingCount > 0;
-            const showDupButton = issue.kind === "duplicate" || issue.kind === "duplicate_rows";
+            const fillPlan = issue.kind === "missing_values" && col ? fillPlans[col] : undefined;
+            const showDupButton = issue.kind === "duplicates";
 
             return (
               <div key={i} className="flex items-start gap-4 px-5 py-3.5">
@@ -95,7 +95,11 @@ export function IssuesPanel({
                     </span>
                   )}
                   <p className="text-sm text-slate-800 leading-snug">{issue.message}</p>
-                  {issue.suggestion && (
+                  {fillPlan ? (
+                    <p className="mt-0.5 text-xs text-slate-500 leading-snug">
+                      Suggested fix: {fillPlan.description}
+                    </p>
+                  ) : issue.suggestion && (
                     <p className="mt-0.5 text-xs text-slate-500 leading-snug">
                       Suggestion: {issue.suggestion}
                     </p>
@@ -103,13 +107,13 @@ export function IssuesPanel({
                 </div>
 
                 {/* Fix button */}
-                {showFillButton && (
+                {fillPlan && (
                   <button
                     type="button"
                     className="shrink-0 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
                     onClick={() => onFixMissingColumn(col!)}
                   >
-                    Fill {missingCount} cell{missingCount > 1 ? "s" : ""}
+                    Fill {fillPlan.count} cell{fillPlan.count > 1 ? "s" : ""}
                   </button>
                 )}
                 {showDupButton && duplicates > 0 && (

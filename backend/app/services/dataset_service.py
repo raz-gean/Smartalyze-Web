@@ -517,7 +517,7 @@ async def save_manual_edit(
 
     previous_columns = (dataset.current_snapshot or {}).get("columns")
     frame = restore_edited_dtypes(frame, previous_columns)
-    snapshot = build_snapshot(frame, source_name=dataset.name, file_type=dataset.file_type, size_bytes=0)
+    snapshot = build_snapshot(frame, source_name=dataset.name, file_type=dataset.file_type)
 
     return await create_dataset_version(
         db,

@@ -10,10 +10,11 @@ The simplified UX uses a "replace current dataset" vs "save as new dataset" flow
 Version history exists internally, but the main workspace API does not expose it.
 """
 
-from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.schemas.common import UTCDateTime
 
 
 class DatasetColumn(BaseModel):
@@ -50,7 +51,7 @@ class DatasetRead(BaseModel):
     preview_json: list[dict] | None = None
     summary_json: dict | None = None
     current_version_id: int | None = None
-    created_at: datetime
+    created_at: UTCDateTime
 
 
 class DatasetVersionRead(BaseModel):
@@ -68,7 +69,7 @@ class DatasetVersionRead(BaseModel):
     preview_json: list[dict] | None = None
     columns_json: list[dict] | None = None
     summary_json: dict | None = None
-    created_at: datetime
+    created_at: UTCDateTime
 
 
 class DatasetVersionSummary(BaseModel):
@@ -77,7 +78,7 @@ class DatasetVersionSummary(BaseModel):
     dataset_id: int
     version_number: int
     operation_type: str
-    created_at: datetime
+    created_at: UTCDateTime
     row_count: int | None = None
     column_count: int | None = None
     missing_cells: int | None = None
