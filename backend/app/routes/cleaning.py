@@ -93,6 +93,7 @@ async def detect_cleaning(
         "category_suggestions": findings.category_suggestions,
         "pseudo_nulls": findings.pseudo_nulls,
         "outliers": findings.outliers,
+        "summary": version.data_snapshot["summary"],
     }
 
 

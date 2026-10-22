@@ -267,6 +267,7 @@ export type CleanDetectResponse = {
   category_suggestions?: CategoryStandardizationSuggestion[];
   pseudo_nulls?: PseudoNullSummary[];
   outliers?: OutlierColumnSummary[];
+  summary?: Record<string, unknown> | null; // version summary incl. the issue counts this scan saved
 };
 
 export type CleanApplyResponse = CleanDetectResponse & {

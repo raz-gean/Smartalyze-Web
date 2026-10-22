@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { detectCleaningIssues, getDatasetRows, saveManualEdit } from "@/lib/api";
 import type { CleanDetectResponse, CleaningIssue, DatasetWorkspace, OutlierColumnSummary } from "@/lib/api";
 import { columnNames, orderColumns } from "@/lib/columnOrder";
+import { columnTypeInfo } from "@/lib/columnTypes";
 import { readEditDraft, removeEditDraft, writeEditDraft } from "@/lib/editDraft";
 import type { EditDraft } from "@/lib/editDraft";
 import { DatasetHealthPanel } from "./EditTab/DatasetHealthPanel";
@@ -52,24 +53,25 @@ export interface EditTabProps {
 
 // ─── Type badge helper ────────────────────────────────────────────────────────
 
-// Column types from the data scan, shown as a short badge with a plain-language tip.
-const TYPE_BADGES: Record<string, { label: string; tip: string; cls: string }> = {
-  numeric:         { label: "123",  tip: "Numbers",                         cls: "bg-blue-50 text-blue-600 border-blue-200" },
-  numeric_string:  { label: "123",  tip: "Numbers saved as text",           cls: "bg-amber-50 text-amber-700 border-amber-200" },
-  text:            { label: "Aa",   tip: "Text",                            cls: "bg-slate-100 text-slate-500 border-slate-200" },
-  categorical:     { label: "Aa",   tip: "Categories (repeated labels)",    cls: "bg-slate-100 text-slate-500 border-slate-200" },
-  datetime:        { label: "date", tip: "Dates",                           cls: "bg-violet-50 text-violet-600 border-violet-200" },
-  datetime_string: { label: "date", tip: "Dates saved as text",             cls: "bg-amber-50 text-amber-700 border-amber-200" },
-  boolean:         { label: "T/F",  tip: "Yes / No values",                 cls: "bg-emerald-50 text-emerald-600 border-emerald-200" },
+// Column types from the data scan, shown as a short badge; the hover tip comes from lib/columnTypes.
+const TYPE_BADGES: Record<string, { label: string; cls: string }> = {
+  numeric:         { label: "123",  cls: "bg-blue-50 text-blue-600 border-blue-200" },
+  numeric_string:  { label: "123",  cls: "bg-amber-50 text-amber-700 border-amber-200" },
+  text:            { label: "Aa",   cls: "bg-slate-100 text-slate-500 border-slate-200" },
+  categorical:     { label: "Aa",   cls: "bg-slate-100 text-slate-500 border-slate-200" },
+  datetime:        { label: "date", cls: "bg-violet-50 text-violet-600 border-violet-200" },
+  datetime_string: { label: "date", cls: "bg-amber-50 text-amber-700 border-amber-200" },
+  boolean:         { label: "T/F",  cls: "bg-emerald-50 text-emerald-600 border-emerald-200" },
 };
-const UNKNOWN_BADGE = { label: "?", tip: "Type not detected (column is empty)", cls: "bg-slate-100 text-slate-400 border-slate-200" };
+const UNKNOWN_BADGE = { label: "?", cls: "bg-slate-100 text-slate-400 border-slate-200" };
 
 function TypeBadge({ type }: { type: string }) {
   const t = TYPE_BADGES[type.toLowerCase()] ?? UNKNOWN_BADGE;
+  const { label, tip } = columnTypeInfo(type);
   return (
     <span
-      title={t.tip}
-      aria-label={t.tip}
+      title={tip}
+      aria-label={label}
       className={`inline-block rounded border px-1 text-[10px] font-medium leading-4 ${t.cls}`}
     >
       {t.label}
@@ -262,6 +264,11 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
         .map(([col, plan]) => [col, { ...plan, count: counts[col] }]),
     );
   }, [pendingSuggestions, fillPlans]);
+  // Columns whose suggested fixes have all been applied (not saved yet).
+  const filledColumns = useMemo(
+    () => new Set(Object.keys(fillPlans).filter((col) => !pendingFillPlans[col])),
+    [fillPlans, pendingFillPlans],
+  );
 
   // ── Search debounce ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -955,6 +962,7 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
       <IssuesPanel
         issues={allIssues}
         fillPlans={pendingFillPlans}
+        filledColumns={filledColumns}
         duplicates={duplicateRowIndices.size}
         duplicateRowCount={duplicateRowIndices.size}
         onFixMissingColumn={handleApplyColumnSuggestions}

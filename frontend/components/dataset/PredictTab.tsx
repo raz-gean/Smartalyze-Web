@@ -10,6 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import type { AnalyzeStatsResponse, PredictResponse } from "@/lib/api";
+import { formatNumber } from "@/lib/format";
 
 export interface PredictTabProps {
   availableColumns: string[];
@@ -202,7 +203,7 @@ export function PredictTab(props: PredictTabProps) {
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                     <XAxis dataKey="step" tick={{ fontSize: 10, fill: "#94a3b8" }} />
-                    <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} width={40} />
+                    <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} width={44} tickFormatter={(v) => formatNumber(Number(v))} />
                     <Tooltip
                       contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0" }}
                       itemStyle={{ color: "#334155" }} // the "lower" area is filled white, which Recharts would reuse as its text color

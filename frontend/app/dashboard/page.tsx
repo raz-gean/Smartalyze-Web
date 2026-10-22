@@ -18,6 +18,7 @@ import {
 
 import { Dataset, deleteDataset, getCurrentUser, listDatasets, renameDataset, uploadDataset } from "@/lib/api";
 import { clearStoredToken, getStoredToken, signOut } from "@/lib/auth";
+import { computeHealthScore } from "@/lib/health";
 
 type DatasetSortKey = "recent" | "name" | "size";
 
@@ -31,29 +32,8 @@ const CHART_COLORS = {
 };
 
 function getDeductions(dataset: Dataset) {
-  const s = dataset.summary_json ?? {};
-  const rowCount = dataset.row_count ?? 0;
-  const colCount = dataset.column_count ?? 1;
-  const missing = Number(s.missing_cells ?? 0);
-  const dups = Number(s.duplicate_rows ?? 0);
-  const totalCells = rowCount * colCount || 1;
-
-  const missingDed = Math.min(30, Math.round((missing / totalCells) * 150));
-  const dupDed     = Math.min(20, Math.round((rowCount > 0 ? dups / rowCount : 0) * 200));
-  const typeDed    = Math.min(15, Number(s.type_issue_columns ?? 0) * 5);
-  const pseudoDed  = Math.min(10, Number(s.pseudo_null_columns ?? 0) * 3);
-  const variantDed = Math.min(10, Number(s.variant_columns ?? 0) * 3);
-  const outlierDed = Math.min(5,  Number(s.outlier_columns ?? 0) * 2);
-
-  const score = Math.max(0, 100 - missingDed - dupDed - typeDed - pseudoDed - variantDed - outlierDed);
-  const label = score >= 85 ? "Great" : score >= 65 ? "Good" : score >= 45 ? "Fair" : "Needs Work";
-  const classes = score >= 85 ? "bg-green-100 text-green-700"
-                : score >= 65 ? "bg-teal-100 text-teal-700"
-                : score >= 45 ? "bg-yellow-100 text-yellow-700"
-                : "bg-red-100 text-red-700";
-  const borderColor = score >= 85 ? "#22c55e" : score >= 65 ? "#14b8a6" : score >= 45 ? "#f59e0b" : "#ef4444";
-
-  return { score, label, classes, borderColor, missingDed, dupDed, typeDed, pseudoDed, variantDed, outlierDed };
+  const health = computeHealthScore(dataset.summary_json, dataset.row_count ?? 0, dataset.column_count ?? 1);
+  return { ...health, classes: health.badgeClasses, borderColor: health.color };
 }
 
 function formatRelativeDate(value: string): string {

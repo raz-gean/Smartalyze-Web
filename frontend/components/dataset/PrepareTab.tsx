@@ -16,6 +16,7 @@ import {
   UnparseableDateRow,
 } from "@/lib/api";
 import { orderColumns } from "@/lib/columnOrder";
+import { plural } from "@/lib/format";
 
 type MissingStrategy = "fill_mean" | "fill_median" | "fill_mode" | "drop_rows";
 type PrepareSubTab = "overview" | "cleaning";
@@ -785,7 +786,7 @@ export function PrepareTab(props: PrepareTabProps) {
                                   {queued && <svg viewBox="0 0 12 9" className="h-2.5 w-2.5 stroke-white fill-none" strokeWidth="2.5"><polyline points="1,5 4,8 11,1"/></svg>}
                                 </button>
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-semibold text-slate-950">Fill <span className="text-indigo-600">&quot;{col}&quot;</span> — {count} empty cells ({pct}%)</p>
+                                  <p className="text-sm font-semibold text-slate-950">Fill <span className="text-indigo-600">&quot;{col}&quot;</span> — {plural(count, "empty cell")} ({pct}%)</p>
                                   <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                                     <span className="text-xs text-slate-500">Strategy:</span>
                                     <select
@@ -822,7 +823,7 @@ export function PrepareTab(props: PrepareTabProps) {
                                 </button>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm font-semibold text-slate-950">Convert disguised blanks in <span className="text-indigo-600">&quot;{pn.column}&quot;</span></p>
-                                  <p className="text-xs text-slate-500 mt-0.5">{pn.total} cells contain &quot;{Object.keys(pn.tokens).join('", "')}&quot; — treated as missing.</p>
+                                  <p className="text-xs text-slate-500 mt-0.5">{plural(pn.total, "cell")} {pn.total === 1 ? "contains" : "contain"} &quot;{Object.keys(pn.tokens).join('", "')}&quot; — treated as missing.</p>
                                 </div>
                                 <span className="shrink-0 rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-semibold text-orange-700">Pseudo-null</span>
                               </div>
@@ -937,7 +938,7 @@ export function PrepareTab(props: PrepareTabProps) {
                                   </button>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-sm font-semibold text-slate-950">Potential outliers in <span className="text-teal-600">&quot;{o.column}&quot;</span></p>
-                                    <p className="text-xs text-slate-500 mt-0.5">{o.outlier_count} values outside the typical range ({o.lower_fence}–{o.upper_fence}). If these are errors, convert them to empty — rows are kept.</p>
+                                    <p className="text-xs text-slate-500 mt-0.5">{plural(o.outlier_count, "value")} outside the typical range ({o.lower_fence}–{o.upper_fence}). {o.outlier_count === 1 ? "If it is an error, convert it to empty" : "If these are errors, convert them to empty"} — rows are kept.</p>
                                     {o.sample_values.length > 0 && (
                                       <p className="mt-0.5 text-xs text-teal-700">Flagged values: {o.sample_values.map(String).join(", ")}</p>
                                     )}

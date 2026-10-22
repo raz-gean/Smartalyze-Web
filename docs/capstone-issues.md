@@ -98,6 +98,7 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 | U2 | **"How to use this page" help icon** in the workspace | Replaces the large guide cards at the top of each tab. A ⓘ button opens the steps on **click** (hover shows a label only; hover doesn't work on touch or for keyboard users). The guide opens by itself on a user's **first visit** to each tab, then stays behind the icon, so the "guided workflow for non-technical users" claim stays true. | 🟡 Mockup |
 | U3 | **AI generated once per dataset version** | AI summaries and chat history are kept while the dataset is open, instead of being regenerated on every tab switch (slower, uses up Groq's free limit, gives different answers each time). Regenerate only after Apply / Save / Restore or when the user clicks **Regenerate**. Also fixes the Detect summary that missed the outliers (S10). | ✅ Done (Phase 1) |
 | U4 | **One slide-in "Ask AI" panel** | A narrow (~380 px) panel from the right, the same on every tab, opened from the workspace header; replaces the wide horizontal chat boxes. Keeps its conversation across tabs (with U3). Bottom sheet on small screens. | ✅ Done (Phase 1) |
+| U6 | **Plain-language polish (QA findings, Oct 22)** | Prepare no longer shows stale issues/fixes after an Edit save, Restore or Re-scan; plain type names on Explore (Numbers, Categories, Dates…); short chart axis numbers; History says Uploaded / Cleaned / Edited / Restored; correct singular/plural in issue texts ("1 missing value"); one health-score formula for Dashboard and Overview, Edit shows "Filled cells"; visible "unusual" outlier cells in Edit; filled columns say "Filled. Save to keep these changes." | ✅ Done |
 | U5 | Order of work | 1) U3 + U4 together with the AI answer-quality fixes (S10); 2) U2; 3) U1 (largest, touches every screen). | — |
 
 **Document impact (after the UI freeze):**
@@ -176,6 +177,7 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 | U2 | Help icon replaces guide cards | Sys | 🟡 Mockup |
 | U3 | AI generated once per dataset version | Sys | ✅ Done (Phase 1) |
 | U4 | Slide-in Ask AI panel | Sys | ✅ Done (Phase 1) |
+| U6 | Plain-language polish (QA findings) | Sys | ✅ |
 | D19 | Retake screenshots after UI freeze (Nov 1) | Doc | ⬜ |
 | D20 | NFR 4: themes, help, AI panel | Doc | ⬜ |
 | D21 | AI generated once per dataset version | Doc | ⬜ |

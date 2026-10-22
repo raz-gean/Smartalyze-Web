@@ -1,5 +1,7 @@
 "use client";
 
+import { plural } from "@/lib/format";
+
 interface DatasetHealthPanelProps {
   totalRows: number;
   totalCols: number;
@@ -48,7 +50,8 @@ export function DatasetHealthPanel({
             )}
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-700">Dataset Health</p>
+            {/* Share of cells that have a value; the Overview health score also counts duplicates, type problems, etc. */}
+            <p className="text-xs font-semibold text-slate-700" title="Share of cells that have a value">Filled cells</p>
             <div className="mt-1 h-1.5 w-24 overflow-hidden rounded-full bg-slate-100">
               <div
                 className={`h-full rounded-full transition-all duration-500 ${completenessColor.bar}`}
@@ -56,7 +59,7 @@ export function DatasetHealthPanel({
               />
             </div>
             <p className="mt-0.5 text-xs text-slate-400">
-              {loading ? "Analysing…" : issueCount === 0 ? "No issues found" : `${issueCount} issue type${issueCount > 1 ? "s" : ""} detected`}
+              {loading ? "Analysing…" : issueCount === 0 ? "No issues found" : `${plural(issueCount, "issue type")} found`}
             </p>
           </div>
         </div>
@@ -68,7 +71,7 @@ export function DatasetHealthPanel({
           {/* Missing cells */}
           <MetricChip
             count={totalMissing}
-            label="missing cells"
+            label="missing cell"
             emptyLabel="No missing cells"
             activeColor="bg-red-50 border-red-200 text-red-700"
             emptyColor="bg-slate-50 border-slate-200 text-slate-400"
@@ -78,7 +81,7 @@ export function DatasetHealthPanel({
           {/* Duplicates */}
           <MetricChip
             count={duplicates}
-            label="duplicate rows"
+            label="duplicate row"
             emptyLabel="No duplicates"
             activeColor="bg-amber-50 border-amber-200 text-amber-700"
             emptyColor="bg-slate-50 border-slate-200 text-slate-400"
@@ -88,8 +91,8 @@ export function DatasetHealthPanel({
           {/* Outliers */}
           <MetricChip
             count={outlierCount}
-            label="outlier cells"
-            emptyLabel="No outliers"
+            label="unusual value"
+            emptyLabel="No unusual values"
             activeColor="bg-orange-50 border-orange-200 text-orange-700"
             emptyColor="bg-slate-50 border-slate-200 text-slate-400"
             icon="◇"
@@ -99,7 +102,8 @@ export function DatasetHealthPanel({
           {(suggestionCount > 0 || loading) && (
             <MetricChip
               count={suggestionCount}
-              label="Suggested fixes"
+              label="suggested fix"
+              pluralLabel="suggested fixes"
               emptyLabel=""
               activeColor="bg-indigo-50 border-indigo-200 text-indigo-700"
               emptyColor="bg-slate-50 border-slate-200 text-slate-400"
@@ -111,9 +115,9 @@ export function DatasetHealthPanel({
 
         {/* Dataset stats */}
         <div className="ml-auto hidden lg:flex items-center gap-4 text-xs text-slate-400">
-          <span>{totalRows.toLocaleString()} rows</span>
+          <span>{plural(totalRows, "row")}</span>
           <span>·</span>
-          <span>{totalCols} columns</span>
+          <span>{plural(totalCols, "column")}</span>
           <span>·</span>
           <span>{totalCells.toLocaleString()} cells total</span>
         </div>
@@ -126,7 +130,8 @@ export function DatasetHealthPanel({
 
 interface MetricChipProps {
   count: number;
-  label: string;
+  label: string; // singular; "s" is added for other counts unless pluralLabel is given
+  pluralLabel?: string;
   emptyLabel: string;
   activeColor: string;
   emptyColor: string;
@@ -134,7 +139,7 @@ interface MetricChipProps {
   loading: boolean;
 }
 
-function MetricChip({ count, label, emptyLabel, activeColor, emptyColor, icon, loading }: MetricChipProps) {
+function MetricChip({ count, label, pluralLabel, emptyLabel, activeColor, emptyColor, icon, loading }: MetricChipProps) {
   if (loading) {
     return (
       <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs ${emptyColor}`}>
@@ -148,7 +153,7 @@ function MetricChip({ count, label, emptyLabel, activeColor, emptyColor, icon, l
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium ${colorClass}`}>
       <span>{icon}</span>
-      <span>{isActive ? `${count.toLocaleString()} ${label}` : emptyLabel}</span>
+      <span>{isActive ? plural(count, label, pluralLabel) : emptyLabel}</span>
     </span>
   );
 }

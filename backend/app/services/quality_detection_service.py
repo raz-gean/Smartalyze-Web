@@ -69,6 +69,11 @@ class QualityFindings:
     outliers: list[OutlierColumnSummary] = field(default_factory=list)
 
 
+def count_label(count: int, word: str, plural: str | None = None) -> str:
+    """'1 missing value' / '3 missing values' for user-facing issue messages."""
+    return f"{count} {word if count == 1 else (plural or word + 's')}"
+
+
 def _is_text_series(series: pd.Series) -> bool:
     if (
         pd.api.types.is_numeric_dtype(series)
@@ -378,9 +383,9 @@ def analyze_quality(frame: pd.DataFrame) -> QualityFindings:
                     kind="categorical_variants",
                     column=name,
                     severity="warning",
-                    message=f"{name} has inconsistent values that look like the same category "
-                    f"({len(category.groups)} group(s), {affected} affected cells).",
-                    suggestion="Standardize the values to one canonical label.",
+                    message=f"{name} has values that look like different spellings of the same category "
+                    f"({count_label(len(category.groups), 'group')}, {count_label(affected, 'cell')} affected).",
+                    suggestion="Change them to one consistent spelling.",
                     details={"group_count": len(category.groups)},
                 )
             )
@@ -393,9 +398,9 @@ def analyze_quality(frame: pd.DataFrame) -> QualityFindings:
                     kind="pseudo_nulls",
                     column=name,
                     severity="warning",
-                    message=f"{name} contains {pseudo.total} disguised missing value(s) "
+                    message=f"{name} contains {count_label(pseudo.total, 'disguised blank')} "
                     f"({', '.join(sorted(pseudo.tokens))}).",
-                    suggestion="Convert these tokens to true missing, then fill or drop them.",
+                    suggestion="Turn these into empty cells, then fill or drop them.",
                     details={"total": pseudo.total, "tokens": pseudo.tokens},
                 )
             )
@@ -421,8 +426,8 @@ def analyze_quality(frame: pd.DataFrame) -> QualityFindings:
                 kind="outliers",
                 column=outlier.column,
                 severity="info",
-                message=f"{outlier.column} has {outlier.outlier_count} potential outlier(s) "
-                f"outside [{outlier.lower_fence}, {outlier.upper_fence}].",
+                message=f"{outlier.column} has {count_label(outlier.outlier_count, 'potential outlier')} "
+                f"outside the typical range ({outlier.lower_fence} to {outlier.upper_fence}).",
                 suggestion="Investigate these values — they may be rare valid events or data errors. Only remove if you are confident they are mistakes.",
                 details={
                     "outlier_count": outlier.outlier_count,

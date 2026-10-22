@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CleanDetectResponse, DatasetWorkspace } from "@/lib/api";
+import { computeHealthScore } from "@/lib/health";
 
 interface OverviewTabProps {
   workspace: DatasetWorkspace;
@@ -19,32 +20,6 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function computeHealth(
-  summary: Record<string, unknown>,
-  rowCount: number,
-  colCount: number,
-): { score: number; color: string; label: string; badgeClasses: string } {
-  const missing = Number(summary.missing_cells ?? 0);
-  const dups = Number(summary.duplicate_rows ?? 0);
-  const totalCells = rowCount * (colCount || 1) || 1;
-
-  const missingDed = Math.min(30, Math.round((missing / totalCells) * 150));
-  const dupDed     = Math.min(20, Math.round((rowCount > 0 ? dups / rowCount : 0) * 200));
-  const typeDed    = Math.min(15, Number(summary.type_issue_columns ?? 0) * 5);
-  const pseudoDed  = Math.min(10, Number(summary.pseudo_null_columns ?? 0) * 3);
-  const variantDed = Math.min(10, Number(summary.variant_columns ?? 0) * 3);
-  const outlierDed = Math.min(5,  Number(summary.outlier_columns ?? 0) * 2);
-
-  const score = Math.max(0, 100 - missingDed - dupDed - typeDed - pseudoDed - variantDed - outlierDed);
-  const label = score >= 85 ? "Great" : score >= 65 ? "Good" : score >= 45 ? "Fair" : "Needs Work";
-  const color = score >= 85 ? "#22c55e" : score >= 65 ? "#14b8a6" : score >= 45 ? "#f59e0b" : "#ef4444";
-  const badgeClasses = score >= 85 ? "bg-green-100 text-green-700"
-                     : score >= 65 ? "bg-teal-100 text-teal-700"
-                     : score >= 45 ? "bg-amber-100 text-amber-700"
-                     : "bg-red-100 text-red-700";
-  return { score, color, label, badgeClasses };
 }
 
 
@@ -71,7 +46,7 @@ export function OverviewTab({ workspace, cleaningDetection, onNavigate, extraRow
   const duplicateRows = Number(summary.duplicate_rows ?? 0);
   const totalCells = rowCount * (colCount || 1);
 
-  const health = computeHealth(summary, rowCount, colCount);
+  const health = computeHealthScore(summary, rowCount, colCount);
   const ringRadius = 38;
   const ringCircumference = 2 * Math.PI * ringRadius;
   const ringDashOffset = ringCircumference - (health.score / 100) * ringCircumference;

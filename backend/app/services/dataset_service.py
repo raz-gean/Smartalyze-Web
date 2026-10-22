@@ -30,6 +30,7 @@ from app.models.dataset import Dataset
 from app.models.dataset_version import DatasetVersion
 from app.schemas.dataset import CreateDatasetVersionRequest
 from app.services.dataset_snapshot import build_snapshot, has_leading_zero_codes, restore_edited_dtypes
+from app.services.quality_detection_service import count_label
 
 ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls", ".json", ".png", ".jpg", ".jpeg"}
 PREVIEW_ROWS = 10
@@ -93,7 +94,7 @@ def _build_workspace_guidance(dataset: Dataset) -> tuple[list[dict], list[dict]]
             {
                 "scope": "dataset",
                 "severity": "warning",
-                "message": f"{missing_cells} missing values detected in this dataset.",
+                "message": f"{count_label(missing_cells, 'missing value')} in this dataset.",
             }
         )
         suggestions.append(
@@ -108,7 +109,7 @@ def _build_workspace_guidance(dataset: Dataset) -> tuple[list[dict], list[dict]]
             {
                 "scope": "dataset",
                 "severity": "warning",
-                "message": f"{duplicate_rows} duplicate rows detected.",
+                "message": f"{count_label(duplicate_rows, 'duplicate row')} found.",
             }
         )
         suggestions.append(

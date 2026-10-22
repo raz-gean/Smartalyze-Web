@@ -28,7 +28,7 @@ from app.schemas.cleaning import CleaningIssue, CleaningOperation, PatternImputa
 from app.services.dataset_snapshot import build_snapshot, snapshot_to_dataframe
 from app.services.derived_column_service import evaluate_derived_column
 from app.services.pattern_imputation_service import apply_pattern_fill, find_pattern_suggestions
-from app.services.quality_detection_service import PSEUDO_NULL_TOKENS, QualityFindings, analyze_quality, is_code_like
+from app.services.quality_detection_service import PSEUDO_NULL_TOKENS, QualityFindings, analyze_quality, count_label, is_code_like
 
 
 def _infer_column_type(series: pd.Series) -> str:
@@ -130,7 +130,7 @@ def _build_detection(
                     kind="missing_values",
                     column=column_name,
                     severity="warning",
-                    message=f"{missing_count} missing values detected in {column_name}.",
+                    message=f"{count_label(missing_count, 'missing value')} in {column_name}.",
                     suggestion="Fill missing values or drop rows depending on the data use case.",
                     details={"missing_values": missing_count},
                 )
@@ -162,7 +162,7 @@ def _build_detection(
                     kind="type_inconsistency",
                     column=column_name,
                     severity="info",
-                    message=f"{column_name} contains date values stored as text — convert to datetime type if needed.",
+                    message=f"{column_name} contains dates stored as text.",
                     suggestion="Convert this column to dates (Prepare → Clean → Formatting).",
                     details={"inferred_type": inferred_type, "invalid_value_samples": invalid_dt_samples},
                 )
@@ -173,7 +173,7 @@ def _build_detection(
             CleaningIssue(
                 kind="duplicates",
                 severity="warning",
-                message=f"{duplicates} duplicate rows detected.",
+                message=f"{count_label(duplicates, 'duplicate row')} found.",
                 suggestion="Remove duplicate rows before saving or exporting.",
                 details={"duplicate_rows": duplicates},
             )

@@ -22,6 +22,8 @@ import type {
   StructureSummaryResponse,
   TrendResponse,
 } from "@/lib/api";
+import { columnTypeInfo } from "@/lib/columnTypes";
+import { formatNumber, plural } from "@/lib/format";
 
 type ExploreSubTab = "analysis" | "aggregation" | "trends";
 
@@ -158,6 +160,9 @@ export function ExploreTab(props: ExploreTabProps) {
 
     const stats = analysisStats;
     const numericCols = stats?.column_stats.filter((c) => c.dtype === "numeric") ?? [];
+    // The column overview tells categories from free text; use it for the summaries too so
+    // both lists name a column's type the same way.
+    const kindByColumn = new Map(structureSummary?.columns.map((c) => [c.name, c.kind]) ?? []);
     const colsWithMissing = stats?.column_stats.filter((c) => c.missing > 0) ?? [];
     const mostMissingCol = [...colsWithMissing].sort((a, b) => b.missing_pct - a.missing_pct)[0] ?? null;
 
@@ -183,7 +188,7 @@ export function ExploreTab(props: ExploreTabProps) {
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">Numeric columns</p>
+            <p className="text-sm text-slate-500">Number columns</p>
             <p className="mt-1 text-2xl font-semibold text-indigo-600">{stats ? numericCols.length : "-"}</p>
           </div>
         </div>
@@ -208,25 +213,19 @@ export function ExploreTab(props: ExploreTabProps) {
             <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {structureSummary.columns.map((col) => {
                 const kindColors: Record<string, string> = {
-                  Numbers: "bg-indigo-100 text-indigo-700",
-                  Text: "bg-slate-100 text-slate-600",
-                  Dates: "bg-purple-100 text-purple-700",
-                  Boolean: "bg-orange-100 text-orange-700",
-                };
-                const kindTooltips: Record<string, string> = {
-                  Numbers: "Numeric column — supports mean, sum, and correlation",
-                  Text: "Text column — supports grouping and frequency analysis",
-                  Dates: "Date column — supports trend analysis",
-                  Boolean: "True/False column",
+                  numeric: "bg-indigo-100 text-indigo-700",
+                  datetime: "bg-purple-100 text-purple-700",
+                  boolean: "bg-orange-100 text-orange-700",
                 };
                 const kindClass = kindColors[col.kind] ?? "bg-slate-100 text-slate-600";
+                const kindInfo = columnTypeInfo(col.kind);
                 const topVal = col.top_values[0];
                 return (
                   <div key={col.name} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                     <div className="flex items-center justify-between gap-2">
                       <p className="truncate text-sm font-medium text-slate-950">{col.name}</p>
-                      <span className={`shrink-0 cursor-help rounded-full px-2 py-0.5 text-xs font-medium ${kindClass}`} title={kindTooltips[col.kind] ?? col.kind}>
-                        {col.kind}
+                      <span className={`shrink-0 cursor-help rounded-full px-2 py-0.5 text-xs font-medium ${kindClass}`} title={kindInfo.tip}>
+                        {kindInfo.label}
                       </span>
                     </div>
                     <div className="mt-2 grid grid-cols-2 gap-1 text-xs text-slate-500">
@@ -269,6 +268,7 @@ export function ExploreTab(props: ExploreTabProps) {
                   <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
                     {stats.column_stats.map((col) => {
                       const isSelected = selectedDistColumn === col.name;
+                      const typeInfo = columnTypeInfo(kindByColumn.get(col.name) ?? col.dtype);
                       return (
                         <tr
                           key={col.name}
@@ -288,8 +288,8 @@ export function ExploreTab(props: ExploreTabProps) {
                               col.dtype === "datetime" ? "bg-purple-100 text-purple-700" :
                               col.dtype === "boolean" ? "bg-orange-100 text-orange-700" :
                               "bg-slate-100 text-slate-600"
-                            }`}>
-                              {col.dtype}
+                            }`} title={typeInfo.tip}>
+                              {typeInfo.label}
                             </span>
                           </td>
                           <td className="px-4 py-3">{col.count}</td>
@@ -340,7 +340,7 @@ export function ExploreTab(props: ExploreTabProps) {
                   return (
                     <div className="mt-4 space-y-3">
                       <div className="flex flex-wrap gap-2 text-xs text-slate-600">
-                        <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">{dist.kind}</span>
+                        <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5" title={columnTypeInfo(dist.kind).tip}>{columnTypeInfo(dist.kind).label}</span>
                         <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">{dist.total_count} rows</span>
                         {dist.missing_count > 0 && (
                           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800">{dist.missing_count} missing</span>
@@ -383,7 +383,7 @@ export function ExploreTab(props: ExploreTabProps) {
                             >
                               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                               <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#94a3b8" }} interval="preserveStartEnd" />
-                              <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} width={36} />
+                              <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} width={36} tickFormatter={(v) => formatNumber(Number(v))} />
                               <Tooltip
                                 contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0" }}
                                 labelFormatter={(v) => `${selectedDistColumn}: ${v}`}
@@ -417,8 +417,8 @@ export function ExploreTab(props: ExploreTabProps) {
               <div className="space-y-3">
                 <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4 text-sm text-indigo-800">
                   {numericCols.length > 0
-                    ? `${numericCols.length} numeric column${numericCols.length === 1 ? "" : "s"} detected. Use the Aggregation tab to summarize them.`
-                    : "No numeric columns detected in this dataset."}
+                    ? `${plural(numericCols.length, "number column")} found. Use the Aggregation tab to summarize them.`
+                    : "No number columns found in this dataset."}
                 </div>
                 {colsWithMissing.length > 0 ? (
                   <div className="rounded-2xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
@@ -443,7 +443,7 @@ export function ExploreTab(props: ExploreTabProps) {
                 )}
                 {(workspace?.dataset.summary_json?.duplicate_rows as number) > 0 && (
                   <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-                    {String(workspace?.dataset.summary_json?.duplicate_rows)} duplicate rows found. Clean them in the Prepare tab.
+                    {plural(Number(workspace?.dataset.summary_json?.duplicate_rows), "duplicate row")} found. Clean them in the Prepare tab.
                   </div>
                 )}
               </div>
@@ -806,7 +806,8 @@ export function ExploreTab(props: ExploreTabProps) {
                             <XAxis dataKey="x" tick={{ fontSize: 10, fill: "#94a3b8" }} />
                             <YAxis
                               tick={{ fontSize: 10, fill: "#94a3b8" }}
-                              width={40}
+                              width={44}
+                              tickFormatter={(v) => formatNumber(Number(v))}
                               domain={yClamp ?? undefined}
                               allowDataOverflow={yClamp !== null}
                             />

@@ -146,6 +146,8 @@ class CleanDetectResponse(BaseModel):
     category_suggestions: list[CategoryStandardizationSuggestion] = []
     pseudo_nulls: list[PseudoNullSummary] = []
     outliers: list[OutlierColumnSummary] = []
+    # The version's summary including the issue counts this scan just saved (health score).
+    summary: dict[str, Any] | None = None
 
 
 class CleanApplyRequest(BaseModel):

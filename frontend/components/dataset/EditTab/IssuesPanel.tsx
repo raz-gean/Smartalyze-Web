@@ -7,6 +7,8 @@ interface IssuesPanelProps {
   issues: CleaningIssue[];
   // Suggested fill per column with missing values: how many cells it fills and how.
   fillPlans: Record<string, { count: number; description: string }>;
+  // Columns whose suggested fixes have all been applied in the grid (not saved yet).
+  filledColumns: Set<string>;
   duplicates: number;
   duplicateRowCount: number;
   onFixMissingColumn: (colName: string) => void;
@@ -31,6 +33,7 @@ const SEVERITY_LABEL: Record<string, string> = {
 export function IssuesPanel({
   issues,
   fillPlans,
+  filledColumns,
   duplicates,
   duplicateRowCount,
   onFixMissingColumn,
@@ -75,6 +78,7 @@ export function IssuesPanel({
           {sorted.map((issue, i) => {
             const col = issue.column;
             const fillPlan = issue.kind === "missing_values" && col ? fillPlans[col] : undefined;
+            const filled = issue.kind === "missing_values" && col !== null && col !== undefined && filledColumns.has(col);
             const showDupButton = issue.kind === "duplicates";
 
             return (
@@ -94,8 +98,12 @@ export function IssuesPanel({
                       {col}
                     </span>
                   )}
-                  <p className="text-sm text-slate-800 leading-snug">{issue.message}</p>
-                  {fillPlan ? (
+                  <p className={`text-sm leading-snug ${filled ? "text-slate-400 line-through" : "text-slate-800"}`}>{issue.message}</p>
+                  {filled ? (
+                    <p className="mt-0.5 text-xs font-medium text-emerald-700 leading-snug">
+                      Filled. Save to keep these changes.
+                    </p>
+                  ) : fillPlan ? (
                     <p className="mt-0.5 text-xs text-slate-500 leading-snug">
                       Suggested fix: {fillPlan.description}
                     </p>

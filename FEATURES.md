@@ -31,7 +31,7 @@
 | File type whitelist validation | ✅ | 400 error for unsupported extensions |
 | OCR model pre-warmed on startup | ✅ | Eliminates 20-30 s first-request delay |
 | Sample dataset (one-click) | ✅ | Dashboard shortcut for demo/testing |
-| Dataset health score | ✅ | % non-null cells shown on dashboard card |
+| Dataset health score | ✅ | 0–100 (Great / Good / Fair / Needs Work): 100 minus capped deductions for missing cells, duplicate rows, and columns with type problems, disguised blanks, spelling variants or outliers. Same formula on the dashboard card and the Overview tab (`lib/health.ts`); the Edit tab separately shows "Filled cells" (% of cells with a value) |
 
 ---
 
@@ -65,7 +65,7 @@
 
 | Feature | Status | Notes |
 |---|---|---|
-| Column Analysis | ✅ | dtype, null %, unique count, mean, median, mode, min, max |
+| Column Analysis | ✅ | Type in plain words (Numbers, Categories, Text, Dates, Yes / No), null %, unique count, mean, median, mode, min, max |
 | Aggregation (group by + agg function) | ✅ | Sum, mean, count, min, max; rendered as bar chart |
 | Trend detection per numeric column | ✅ | scikit-learn LinearRegression slope — Increasing / Stable / Decreasing / Volatile (R² < 0.1) badge |
 | Trend chart | ✅ | Recharts line chart with direction label |
@@ -120,7 +120,7 @@
 | Feature | Status | Notes |
 |---|---|---|
 | Automatic snapshot on every operation | ✅ | JSONB stored in PostgreSQL |
-| Version history panel | ✅ | Shows all versions with timestamps in the viewer's local time (the API sends UTC) |
+| Version history panel | ✅ | Shows all versions as Uploaded / Cleaned / Edited / Restored from vN, with timestamps in the viewer's local time (the API sends UTC) |
 | Dataset size | ✅ | Uploads show the uploaded file's size; cleaned/edited versions show their size as a CSV file |
 | Restore to any version | ✅ | One-click rollback |
 

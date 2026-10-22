@@ -67,6 +67,8 @@ export function EditableCell({
 
   let cellClass = "relative w-full px-3 py-2 text-sm select-none cursor-pointer transition-colors";
   if (isMissing && !isDirty) cellClass += " bg-red-50";
+  // Same look as outlier cells in Prepare's Data view.
+  if (isOutlier && !isDirty) cellClass += " border-l-2 border-l-teal-300 bg-teal-50";
   if (isDirty) cellClass += " border-l-2 border-l-amber-400 bg-amber-50/40";
 
   if (editing) {
@@ -88,9 +90,19 @@ export function EditableCell({
   }
 
   return (
-    <div className={cellClass} onClick={startEdit} title="Click to edit">
-      {isOutlier && (
-        <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-red-400" title="Outlier detected" />
+    <div
+      className={cellClass}
+      onClick={startEdit}
+      title={
+        isOutlier && !isDirty
+          ? "Unusual value: far outside the typical range. It could be a rare real event or a typing mistake; check it before changing it. Click to edit."
+          : "Click to edit"
+      }
+    >
+      {isOutlier && !isDirty && (
+        <span className="absolute right-1 top-0.5 rounded bg-teal-100 px-1 text-[9px] font-semibold uppercase tracking-wide text-teal-700">
+          unusual
+        </span>
       )}
       {isMissing && !isDirty ? (
         <span className="text-slate-300 italic text-xs">
@@ -99,7 +111,7 @@ export function EditableCell({
       ) : value === "" && !isDirty ? (
         <span className="font-mono text-xs text-slate-400">&quot;&quot;</span>
       ) : (
-        <span className={isDirty ? "text-amber-800 font-medium" : "text-slate-800"}>{displayValue}</span>
+        <span className={isDirty ? "text-amber-800 font-medium" : isOutlier ? "text-teal-800 font-medium" : "text-slate-800"}>{displayValue}</span>
       )}
     </div>
   );

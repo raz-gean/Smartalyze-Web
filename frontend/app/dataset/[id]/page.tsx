@@ -55,6 +55,7 @@ import {
 import { clearStoredToken, getStoredToken } from "@/lib/auth";
 import { findDateColumns } from "@/lib/dateColumns";
 import { operationsToPandasScript } from "@/lib/codeExport";
+import { plural } from "@/lib/format";
 import { OverviewTab } from "@/components/dataset/OverviewTab";
 import { PrepareTab } from "@/components/dataset/PrepareTab";
 import { ExploreTab } from "@/components/dataset/ExploreTab";
@@ -75,6 +76,16 @@ const AI_TOPIC_COPY: Record<AITopic, { title: string; waiting: string }> = {
 type WorkspaceTab = "overview" | "prepare" | "explore" | "detect" | "predict" | "edit";
 type PrepareSubTab = "overview" | "cleaning";
 type MissingStrategy = "fill_mean" | "fill_median" | "fill_mode" | "drop_rows";
+
+// History list label for how a version was made (stored as an internal operation name).
+function describeVersionChange(operationType: string): string {
+  if (operationType === "original") return "Uploaded";
+  if (operationType === "result") return "Cleaned";
+  if (operationType === "manual_edit") return "Edited";
+  const restored = /^restore_v(\d+)$/.exec(operationType);
+  if (restored) return `Restored from v${restored[1]}`;
+  return operationType.replace(/_/g, " ");
+}
 
 function getColumnType(columnName: string, detection: CleanDetectResponse | null): string {
   return detection?.column_types?.[columnName] ?? "unknown";
@@ -499,7 +510,19 @@ export default function DatasetWorkspacePage() {
     if (!workspace || !token || cleaningDetection || cleaningDetecting || cleaningScanFailed) return;
     setCleaningDetecting(true);
     detectCleaningIssues(workspace.dataset.id, token)
-      .then(setCleaningDetection)
+      .then((detection) => {
+        setCleaningDetection(detection);
+        // The scan saves its issue counts on the version; copy them into the loaded workspace
+        // so the Overview health score matches the dashboard without a reload.
+        const scanSummary = detection.summary;
+        if (scanSummary) {
+          setWorkspace((ws) =>
+            ws && ws.dataset.current_version_id === detection.dataset_version_id
+              ? { ...ws, dataset: { ...ws.dataset, summary_json: { ...(ws.dataset.summary_json ?? {}), ...scanSummary } } }
+              : ws,
+          );
+        }
+      })
       .catch(() => { setCleaningScanFailed(true); toast.error("Could not detect cleaning issues."); })
       .finally(() => setCleaningDetecting(false));
   }, [workspace, token, cleaningDetection, cleaningDetecting, cleaningScanFailed]);
@@ -681,8 +704,15 @@ export default function DatasetWorkspacePage() {
 
   function clearAllFilters() { setFilterPredicates([]); setFilterResult(null); }
 
+  // Forget the scan, the fix queue and any unsaved cleaning result, e.g. after the data was
+  // saved elsewhere. Prepare then re-scans and re-selects the recommended fixes, so no fix
+  // from an older scan can stay queued (and counted) without being shown.
+  function resetCleaningState() {
+    setCleaningResult(null); setCleaningDetection(null); setCleaningOperations([]); setCumulativeAppliedOperations([]);
+  }
+
   function handleRescanData() {
-    setCleaningDetection(null); setCleaningResult(null); setCumulativeAppliedOperations([]);
+    resetCleaningState();
   }
 
   function clearAnalysisState() {
@@ -696,7 +726,7 @@ export default function DatasetWorkspacePage() {
   }
 
   function handleDiscardResult() {
-    setCleaningResult(null); setCleaningDetection(null); setCleaningOperations([]); setCumulativeAppliedOperations([]);
+    resetCleaningState();
     toast.info("Changes discarded.");
   }
 
@@ -733,7 +763,7 @@ export default function DatasetWorkspacePage() {
       setShowSaveModal(false);
       if (saveMode === "replace") {
         setWorkspace({ ...workspace, dataset: response.dataset });
-        setCleaningResult(null); setCleaningDetection(null); setCumulativeAppliedOperations([]);
+        resetCleaningState();
         setOverviewExtraRows([]); setOverviewTotalRows(null);
         clearAnalysisState();
         toast.success("Result replaced the current dataset.");
@@ -768,7 +798,7 @@ export default function DatasetWorkspacePage() {
     try {
       const response = await restoreDatasetVersion(workspace.dataset.id, version.id, token);
       setWorkspace({ ...workspace, dataset: response.dataset });
-      setCleaningResult(null); setCleaningDetection(null); setCumulativeAppliedOperations([]);
+      resetCleaningState();
       setOverviewExtraRows([]); setOverviewTotalRows(null);
       clearAnalysisState();
       toast.success(response.message);
@@ -1210,6 +1240,8 @@ export default function DatasetWorkspacePage() {
                 getDatasetWorkspace(datasetId, token).then((ws) => {
                   setWorkspace(ws);
                   setEditTabIsDirty(false);
+                  resetCleaningState();
+                  setOverviewExtraRows([]); setOverviewTotalRows(null);
                   clearAnalysisState();
                   toast.success("Manual edits saved as a new version.");
                 }).catch(() => toast.error("Saved, but could not reload workspace."));
@@ -1262,13 +1294,13 @@ export default function DatasetWorkspacePage() {
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2 text-sm">
                           <span className="font-semibold text-slate-950">v{v.version_number}</span>
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{v.operation_type}</span>
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600" title={v.operation_type}>{describeVersionChange(v.operation_type)}</span>
                           {v.is_current && <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">current</span>}
                         </div>
                         <p className="mt-1 text-xs text-slate-500">
                           {new Date(v.created_at).toLocaleString()} · {v.row_count ?? "?"} rows · {v.column_count ?? "?"} cols
-                          {v.missing_cells != null ? ` · ${v.missing_cells} missing` : ""}
-                          {v.duplicate_rows != null ? ` · ${v.duplicate_rows} duplicates` : ""}
+                          {v.missing_cells != null ? ` · ${v.missing_cells.toLocaleString()} missing` : ""}
+                          {v.duplicate_rows != null ? ` · ${plural(v.duplicate_rows, "duplicate")}` : ""}
                         </p>
                       </div>
                       <button type="button" className="shrink-0 rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" onClick={() => setPendingRestore(v)} disabled={v.is_current || restoringVersionId !== null}>
