@@ -46,8 +46,15 @@ _APP_FACTS = (
     "Convert disguised blanks (e.g. 'N/A' to empty); Convert column type (to numbers or dates); "
     "Standardize dates; Trim whitespace; Lowercase; and, under 'Potential outliers' for a column, "
     "two options: convert the outliers to empty, or drop the rows that contain them. "
+    "All of these fixes are made in Prepare; the Detect tab only shows outliers and correlations. "
+    "Predict forecasts one number column from its row order or from one date column; it cannot use "
+    "other columns (such as a category) as inputs, so never suggest that. "
+    "For empty cells Smartalyze pre-selects Smart fill where it is offered, otherwise the median for "
+    "number columns and the most common value for text; recommend the same choice. "
     "Recommend only these actions, by these names. Never invent other buttons, menus or "
-    "group-wise fills (for example 'median per city' does not exist)."
+    "group-wise fills (for example 'median per city' does not exist). "
+    "Explore > Aggregation lists 'Suggested for your data': groupings picked by how much a "
+    "category explains the differences in a number column; the user clicks one to see the result."
 )
 _ACCURACY_RULES = (
     "Use only the columns and numbers given in the context; never invent values, columns or examples. "
@@ -250,10 +257,14 @@ def _build_analyze_context_text(ctx: AIAnalyzeContext) -> str:
                 parts.append(f"range=[{c.min:.2f}, {c.max:.2f}]")
             lines.append(" ".join(parts))
     if ctx.trends:
-        lines.append("Trend analysis:")
+        # Explore's trends use the rows in their current order as the x-axis, not dates.
+        lines.append(
+            "Trend analysis (measured across the rows in their current order, not by date; describe it "
+            "as going up or down 'from the first row to the last', never 'per time period' or 'over time'):"
+        )
         for t in ctx.trends[:5]:
             lines.append(
-                f"  {t.column}: {t.direction} (slope={t.slope:.4f}, R²={t.r_squared:.2f})"
+                f"  {t.column}: {t.direction} (change per row={t.slope:.4f}, R²={t.r_squared:.2f})"
             )
     if ctx.anomalies:
         lines.append("Anomaly detection:")
@@ -267,6 +278,10 @@ def _build_analyze_context_text(ctx: AIAnalyzeContext) -> str:
         for p in ctx.top_correlations[:5]:
             direction = "positive" if p.r >= 0 else "negative"
             lines.append(f"  {p.col_a} vs {p.col_b}: r={p.r:.2f} ({direction})")
+    if ctx.suggested_groupings:
+        lines.append("Suggested groupings (shown in Explore > Aggregation under 'Suggested for your data'):")
+        for suggestion in ctx.suggested_groupings[:4]:
+            lines.append(f"  {suggestion}")
     # Each tab sends only its own results. An empty section means "not part of this view",
     # never "none found" -- say so, or the model reports e.g. "no outliers" on Explore.
     missing = [

@@ -41,6 +41,7 @@ import {
   getTrends,
   groupDataset,
   GroupByResponse,
+  GroupingSuggestion,
   listDatasetVersions,
   predictDataset,
   PredictResponse,
@@ -64,6 +65,7 @@ import { PredictTab } from "@/components/dataset/PredictTab";
 import { EditTab } from "@/components/dataset/EditTab";
 import { TabErrorBoundary } from "@/components/TabErrorBoundary";
 import { AskAIPanel, type AISummaryState } from "@/components/dataset/AskAIPanel";
+import { WorkspaceHelp } from "@/components/dataset/WorkspaceHelp";
 
 const AI_PANEL_KEY = "smartalyze:ai-panel-open";
 type AITopic = "cleaning" | "analysis" | "detect";
@@ -349,6 +351,7 @@ export default function DatasetWorkspacePage() {
           })),
           anomalies: [],
           top_correlations: [],
+          suggested_groupings: (structureSummary?.grouping_suggestions ?? []).map((g) => `${g.title}: ${g.reason}`),
         }
       : null;
 
@@ -861,6 +864,27 @@ export default function DatasetWorkspacePage() {
     }
   }
 
+  // A suggested grouping fills the Aggregation controls and runs it straight away, using the
+  // suggestion's own values (the control state only updates on the next render).
+  async function handleApplyGroupingSuggestion(suggestion: GroupingSuggestion) {
+    if (!workspace || !token) return;
+    setAggregationGroupBy(suggestion.group_by);
+    setAggregationOperation(suggestion.aggregate_func);
+    if (suggestion.aggregate_func !== "count") setAggregateColumn(suggestion.aggregate_column);
+    setGroupLoading(true);
+    try {
+      setGroupResult(await groupDataset(workspace.dataset.id, {
+        group_by: suggestion.group_by,
+        aggregate_column: suggestion.aggregate_column,
+        aggregate_func: suggestion.aggregate_func,
+      }, token));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not generate aggregation.");
+    } finally {
+      setGroupLoading(false);
+    }
+  }
+
   function handleExportGroupCSV() {
     if (!groupResult) return;
     const opLabel = aggregationOperation === "mean" ? "Average" : aggregationOperation.charAt(0).toUpperCase() + aggregationOperation.slice(1);
@@ -933,17 +957,19 @@ export default function DatasetWorkspacePage() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
-      <div className={`mx-auto w-full max-w-7xl px-4 py-8 ${aiOpen ? "xl:max-w-420" : ""}`}>
+      {/* With the Ask AI panel docked (xl), everything below the site navigation leaves room for it,
+          so the header buttons (Ask AI, Save Result, Dashboard) are never under the panel. */}
+      <div className={`mx-auto w-full max-w-7xl px-4 py-8 ${aiOpen ? "xl:max-w-420 xl:pr-104" : ""}`}>
         {/* Page header */}
         <header className="mb-6 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
+          <div className="min-w-0 sm:min-w-56 sm:flex-1">
             <p className="text-xs font-medium uppercase tracking-widest text-indigo-500">Dataset workspace</p>
-            <h1 className="mt-1 truncate text-2xl font-semibold tracking-tight text-slate-950">{workspace.dataset.original_filename}</h1>
+            <h1 className="mt-1 truncate text-2xl font-semibold tracking-tight text-slate-950" title={workspace.dataset.original_filename}>{workspace.dataset.original_filename}</h1>
             <p className="mt-0.5 text-sm text-slate-500">
               {workspace.dataset.row_count?.toLocaleString() ?? "?"} rows · {workspace.dataset.column_count ?? "?"} cols
             </p>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             {cleaningResult && (
               <button
                 type="button"
@@ -1026,7 +1052,7 @@ export default function DatasetWorkspacePage() {
         )}
 
         {/* Sticky tab bar */}
-        <div className="sticky top-0 z-10 -mx-4 mb-6 flex gap-1 border-b border-slate-200 bg-slate-50 px-4 py-2 backdrop-blur-sm">
+        <div className="sticky top-0 z-10 -mx-4 mb-6 flex gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 px-4 py-2 backdrop-blur-sm">
           {tabs.map(({ key, label }) => {
             const hasBadge = key === "prepare" && cleaningResult !== null;
             const hasEditBadge = key === "edit" && editTabIsDirty;
@@ -1035,7 +1061,7 @@ export default function DatasetWorkspacePage() {
                 key={key}
                 type="button"
                 onClick={() => handleTabChange(key)}
-                className={`relative rounded-full px-5 py-2 text-sm font-medium transition ${
+                className={`relative shrink-0 whitespace-nowrap rounded-full px-5 py-2 text-sm font-medium transition ${
                   activeTab === key ? "bg-indigo-600 text-white shadow-sm" : "text-slate-600 hover:bg-white hover:text-indigo-700"
                 }`}
               >
@@ -1052,8 +1078,9 @@ export default function DatasetWorkspacePage() {
         </div>
 
         {/* Tab content; on wide screens it leaves room for the docked Ask AI panel when open */}
-        <div className={`flex items-start gap-6 ${aiOpen ? "xl:pr-100" : ""}`}>
+        <div className="flex items-start gap-6">
         <div className="w-full min-w-0 flex-1">
+          <WorkspaceHelp key={activeTab} tab={activeTab} />
           {activeTab === "overview" && workspace && (
             <TabErrorBoundary tabName="Overview">
               <OverviewTab
@@ -1187,6 +1214,7 @@ export default function DatasetWorkspacePage() {
               setShowSaveModal={setShowSaveModal}
               setActiveGroupTab={setActiveTab}
               handleGenerateAggregation={handleGenerateAggregation}
+              onApplyGroupingSuggestion={handleApplyGroupingSuggestion}
               handleExportGroupCSV={handleExportGroupCSV}
               handleSaveGroupAsDataset={handleSaveGroupAsDataset}
             />

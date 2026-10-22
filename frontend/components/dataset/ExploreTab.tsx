@@ -19,11 +19,12 @@ import type {
   CleanApplyResponse,
   DistributionResponse,
   GroupByResponse,
+  GroupingSuggestion,
   StructureSummaryResponse,
   TrendResponse,
 } from "@/lib/api";
 import { columnTypeInfo } from "@/lib/columnTypes";
-import { formatNumber, plural } from "@/lib/format";
+import { formatNumber, formatStat, plural } from "@/lib/format";
 
 type ExploreSubTab = "analysis" | "aggregation" | "trends";
 
@@ -102,6 +103,7 @@ export interface ExploreTabProps {
   setShowSaveModal: (v: boolean) => void;
   setActiveGroupTab: (tab: "prepare" | "explore" | "detect" | "predict") => void;
   handleGenerateAggregation: () => void;
+  onApplyGroupingSuggestion: (suggestion: GroupingSuggestion) => void;
   handleExportGroupCSV: () => void;
   handleSaveGroupAsDataset: () => void;
 }
@@ -147,6 +149,7 @@ export function ExploreTab(props: ExploreTabProps) {
     setShowSaveModal,
     setActiveGroupTab,
     handleGenerateAggregation,
+    onApplyGroupingSuggestion,
     handleExportGroupCSV,
     handleSaveGroupAsDataset,
   } = props;
@@ -215,6 +218,7 @@ export function ExploreTab(props: ExploreTabProps) {
                 const kindColors: Record<string, string> = {
                   numeric: "bg-indigo-100 text-indigo-700",
                   datetime: "bg-purple-100 text-purple-700",
+                  datetime_string: "bg-purple-100 text-purple-700",
                   boolean: "bg-orange-100 text-orange-700",
                 };
                 const kindClass = kindColors[col.kind] ?? "bg-slate-100 text-slate-600";
@@ -348,9 +352,13 @@ export function ExploreTab(props: ExploreTabProps) {
                         <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">{dist.unique_count} unique</span>
                         {dist.kind === "numeric" && dist.mean != null && (
                           <>
-                            <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">mean {dist.mean}</span>
-                            {dist.median != null && <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">median {dist.median}</span>}
-                            {dist.std != null && <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">σ {dist.std}</span>}
+                            <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">average {formatStat(dist.mean)}</span>
+                            {dist.median != null && <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">median {formatStat(dist.median)}</span>}
+                            {dist.std != null && (
+                              <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5" title="Standard deviation: how far values typically are from the average">
+                                spread (std. dev.) {formatStat(dist.std)}
+                              </span>
+                            )}
                           </>
                         )}
                       </div>
@@ -463,6 +471,7 @@ export function ExploreTab(props: ExploreTabProps) {
     const numericColumns =
       analysisStats?.column_stats.filter((c) => c.dtype === "numeric").map((c) => c.name) ?? [];
     const groupByOptions = groupableColumns.length > 0 ? groupableColumns : availableColumns;
+    const suggestions = structureSummary?.grouping_suggestions ?? [];
     const aggregateOptions = numericColumns.length > 0 ? numericColumns : availableColumns;
 
     const isCount = aggregationOperation === "count";
@@ -472,16 +481,54 @@ export function ExploreTab(props: ExploreTabProps) {
 
     return (
       <div className="space-y-6">
-        {/* Guidance banner */}
-        <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
-          <p className="text-sm font-semibold text-indigo-800">Aggregate your data</p>
-          <p className="mt-1 text-xs leading-relaxed text-slate-600">
-            Group rows by a category and compute a summary value per group.{" "}
-            <span className="text-slate-400">
-              Example: total sales per region, average rating per product category.
-            </span>
-          </p>
-        </div>
+        {/* Suggested groupings (Objective 4): picked by how much a category explains a number column (η²) */}
+        {suggestions.length > 0 && (
+          <section aria-labelledby="grouping-suggestions-title" className="space-y-3">
+            <div>
+              <h3 id="grouping-suggestions-title" className="text-base font-semibold text-slate-950">Suggested for your data</h3>
+              <p className="mt-0.5 text-sm text-slate-500">
+                Picked by measuring how much each category explains the differences in a number column. Click one to see it.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {suggestions.map((s) => {
+                const isActive =
+                  groupResult !== null &&
+                  groupResult.group_by === s.group_by &&
+                  aggregationGroupBy === s.group_by &&
+                  aggregationOperation === s.aggregate_func &&
+                  (s.aggregate_func === "count" ||
+                    (groupResult.aggregate_column === s.aggregate_column && aggregateColumn === s.aggregate_column));
+                const tag = s.strength_label === "strong" ? "Strong pattern" : s.strength_label === "moderate" ? "Moderate pattern" : "Row count";
+                const tagClass = s.strength_label === "strong"
+                  ? "bg-indigo-100 text-indigo-700"
+                  : s.strength_label === "moderate" ? "bg-sky-100 text-sky-700" : "bg-slate-100 text-slate-600";
+                return (
+                  <button
+                    key={`${s.group_by}|${s.aggregate_column}|${s.aggregate_func}`}
+                    type="button"
+                    aria-pressed={isActive}
+                    disabled={groupLoading}
+                    onClick={() => onApplyGroupingSuggestion(s)}
+                    className={`flex h-full flex-col items-start gap-2 rounded-2xl border p-4 text-left transition disabled:cursor-wait ${
+                      isActive
+                        ? "border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500"
+                        : "border-slate-200 bg-white shadow-sm hover:border-indigo-300 hover:bg-indigo-50/40"
+                    }`}
+                  >
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${tagClass}`}>{tag}</span>
+                    <span className="text-sm font-semibold text-slate-950">{s.title}</span>
+                    <span className="text-xs leading-relaxed text-slate-600">{s.reason}</span>
+                    <span className="mt-auto pt-1 text-xs font-semibold text-indigo-700">
+                      {isActive ? "Showing below" : "Show result →"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <h3 className="pt-2 text-base font-semibold text-slate-950">Or choose your own</h3>
+          </section>
+        )}
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <label className="block rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -493,7 +540,7 @@ export function ExploreTab(props: ExploreTabProps) {
             >
               {groupByOptions.map((col) => <option key={col} value={col}>{col}</option>)}
             </select>
-            <p className="mt-1.5 text-xs text-slate-400">Categorical or text column</p>
+            <p className="mt-1.5 text-xs text-slate-400">The groups, for example a city or category</p>
           </label>
 
           {isCount ? (
@@ -577,7 +624,7 @@ export function ExploreTab(props: ExploreTabProps) {
                   {groupResult.results.map((row, i) => (
                     <tr key={i}>
                       <td className="px-4 py-3 font-medium text-slate-950">{row.group}</td>
-                      <td className="px-4 py-3 text-slate-800">{row.value.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-slate-800">{formatStat(row.value)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -711,16 +758,6 @@ export function ExploreTab(props: ExploreTabProps) {
 
     return (
       <div className="space-y-6">
-        <div className="rounded-2xl border border-violet-100 bg-violet-50/60 p-4">
-          <p className="text-sm font-semibold text-violet-800">Trend Analysis</p>
-          <p className="mt-1 text-xs text-slate-600 leading-relaxed">
-            Select a numeric column to see how its values change from the first row to the last, using linear regression.{" "}
-            <span className="text-slate-400">
-              A straight trend line shows the underlying direction and smooths out noise.
-            </span>
-          </p>
-        </div>
-
         {/* Trends here use row order as the time axis; say so, so a customer list or survey
             isn't read as "going up over time". */}
         <div role="note" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -757,16 +794,16 @@ export function ExploreTab(props: ExploreTabProps) {
               <>
                 <div className="grid gap-4 sm:grid-cols-3 xl:grid-cols-6">
                   {[
-                    { label: "Min", value: activeTrend.min },
-                    { label: "Max", value: activeTrend.max },
-                    { label: "Mean", value: activeTrend.mean },
-                    { label: "Slope", value: activeTrend.slope },
-                    { label: "R²", value: activeTrend.r_squared },
-                    { label: "Points", value: activeTrend.count },
+                    { label: "Min", value: formatStat(activeTrend.min) },
+                    { label: "Max", value: formatStat(activeTrend.max) },
+                    { label: "Average", value: formatStat(activeTrend.mean) },
+                    { label: "Change per row", value: formatStat(activeTrend.slope) },
+                    { label: "R² (fit)", value: formatStat(activeTrend.r_squared) },
+                    { label: "Points", value: activeTrend.count.toLocaleString() },
                   ].map(({ label, value }) => (
                     <div key={label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                       <p className="text-sm text-slate-500">{label}</p>
-                      <p className="mt-1 text-lg font-semibold text-slate-950">{String(value)}</p>
+                      <p className="mt-1 text-lg font-semibold text-slate-950">{value}</p>
                     </div>
                   ))}
                 </div>
@@ -868,13 +905,6 @@ export function ExploreTab(props: ExploreTabProps) {
   return (
     <div className="space-y-6">
 
-      {/* Guided workflow hint */}
-      <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-4">
-        <p className="text-sm font-semibold text-indigo-800">How to use this tab</p>
-        <p className="text-sm text-indigo-700 mt-0.5">
-          Use <strong>Column Analysis</strong> to see statistics (mean, min, max) for each column and explore distributions. Switch to <strong>Aggregation</strong> to group your data and compute totals or averages. Use <strong>Trends</strong> to see whether a column goes up or down across your rows.
-        </p>
-      </div>
       <div className="flex flex-wrap gap-2">
         {subTabs.map(({ key, label }) => (
           <button

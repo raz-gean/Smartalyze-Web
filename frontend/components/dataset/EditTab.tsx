@@ -898,15 +898,6 @@ export function EditTab({ workspace, token, onDirtyChange, onSaved }: EditTabPro
 
   return (
     <div className="space-y-3">
-      {/* Guidance banner */}
-      <div className="rounded-2xl border border-sky-100 bg-sky-50/60 p-4">
-        <p className="text-sm font-semibold text-sky-900">Manual Dataset Editor</p>
-        <p className="mt-1 text-xs text-slate-600 leading-relaxed">
-          Click any cell to edit it. Double-click a column header to rename it. Use the toolbar to add rows, delete selected rows, and undo changes.{" "}
-          <span className="text-slate-400">Saves create a new version — your history is preserved.</span>
-        </p>
-      </div>
-
       {suggestionsLoading && (
         <p className="text-xs text-slate-400 px-1">Loading suggested fixes…</p>
       )}

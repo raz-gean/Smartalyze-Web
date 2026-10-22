@@ -582,13 +582,6 @@ export function PrepareTab(props: PrepareTabProps) {
 
   return (
     <div className="space-y-6">
-      {/* Guided workflow hint */}
-      <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-4">
-        <p className="text-sm font-semibold text-indigo-800">How to use this tab</p>
-        <p className="text-sm text-indigo-700 mt-0.5">
-          Browse your live data in the <strong>Data</strong> view — cells highlighted red are missing, yellow have a type problem. Switch to <strong>Clean</strong> to queue operations and apply them.
-        </p>
-      </div>
       {/* Sub-tab pills */}
       <div className="flex gap-2">
         {(["overview", "cleaning"] as PrepareSubTab[]).map((t) => (

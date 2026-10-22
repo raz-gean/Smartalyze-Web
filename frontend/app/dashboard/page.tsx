@@ -318,19 +318,19 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-8 text-slate-900">
+    <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-900 sm:px-6">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
 
-        {/* Page Header */}
-        <header className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-white px-6 py-5 shadow-sm">
-          <div>
+        {/* Page Header: the buttons move under the greeting on narrow screens */}
+        <header className="flex flex-col gap-4 rounded-2xl border border-slate-100 bg-white px-6 py-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-widest text-indigo-500">Smartalyze</p>
             <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-slate-900">
               {username ? `Welcome back, ${username}` : "Your Datasets"}
             </h1>
             <p className="mt-1 text-sm text-slate-400">Turn raw data into clean, actionable insights.</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <input ref={fileInputRef} className="hidden" type="file" accept=".csv,.xlsx,.xls,.json,.png,.jpg,.jpeg" onChange={handleUpload} />
             <button
               type="button"
@@ -589,15 +589,14 @@ export default function DashboardPage() {
                         outerRadius={88}
                         paddingAngle={3}
                         dataKey="value"
-                        label={({ name, value }) => `${name}: ${value}`}
-                        labelLine={false}
                       >
                         {qualityPieData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.fill} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(value) => [`${value} dataset${Number(value) !== 1 ? "s" : ""}`, ""]} />
-                      <Legend />
+                      <Tooltip formatter={(value, name) => [`${value} dataset${Number(value) !== 1 ? "s" : ""}`, name]} />
+                      {/* Counts live in the legend: labels around the ring were cut off on narrow screens */}
+                      <Legend formatter={(name: string) => `${name}: ${qualityPieData.find((d) => d.name === name)?.value ?? 0}`} />
                     </PieChart>
                   </ResponsiveContainer>
                 ) : (

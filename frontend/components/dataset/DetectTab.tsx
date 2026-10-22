@@ -407,13 +407,6 @@ export function DetectTab(props: DetectTabProps) {
   return (
     <div className="space-y-6">
 
-      {/* Guided workflow hint */}
-      <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-4">
-        <p className="text-sm font-semibold text-indigo-800">How to use this tab</p>
-        <p className="text-sm text-indigo-700 mt-0.5">
-          <strong>Anomaly Detection</strong> uses the IQR statistical method to automatically flag unusual values in your numeric columns. Switch to <strong>Correlation</strong> to discover which columns are related — and how strongly.
-        </p>
-      </div>
       <div className="flex flex-wrap gap-2">
         {subTabs.map(({ key, label }) => (
           <button

@@ -58,31 +58,32 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-indigo-100 bg-white/95 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-6 lg:px-8">
         <Link href="/" className="text-lg font-semibold tracking-tight text-indigo-700">
           Smartalyze
         </Link>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <Link
             href="/dashboard"
-            className="rounded-xl border border-indigo-200 px-4 py-2 text-sm font-medium text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-50"
+            className="rounded-xl border border-indigo-200 px-3 py-2 text-sm font-medium text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-50 sm:px-4"
           >
             Dashboard
           </Link>
 
           <Link
             href="/profile"
-            className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+            aria-label="Profile"
+            className="flex items-center gap-2 rounded-xl border border-slate-200 px-2 py-1.5 text-sm font-medium text-slate-700 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 sm:px-3"
           >
             <NavAvatar user={user} />
-            {user ? <span className="hidden sm:inline">{user.username}</span> : <span>Profile</span>}
+            {user ? <span className="hidden sm:inline">{user.username}</span> : <span className="hidden sm:inline">Profile</span>}
           </Link>
 
           <button
             type="button"
             onClick={handleLogout}
-            className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500"
+            className="rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 sm:px-4"
           >
             Logout
           </button>

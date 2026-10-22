@@ -67,6 +67,7 @@
 |---|---|---|
 | Column Analysis | ✅ | Type in plain words (Numbers, Categories, Text, Dates, Yes / No), null %, unique count, mean, median, mode, min, max |
 | Aggregation (group by + agg function) | ✅ | Sum, mean, count, min, max; rendered as bar chart |
+| Suggested groupings | ✅ | "Suggested for your data": up to 3 "Average <number> by <category>" cards ranked by η² (share of the number column's variation explained by the category; one-way ANOVA effect size, shown when ≥ 0.06, "strong" ≥ 0.14) plus a row count; one click fills the controls and shows the result. ID-like and code columns are skipped |
 | Trend detection per numeric column | ✅ | scikit-learn LinearRegression slope across rows (row order is the time axis, with a note that this only means something when rows are in time order) — Increasing / Stable / Decreasing / Volatile (R² < 0.1) badge |
 | Trend chart | ✅ | Recharts line chart with direction label |
 
@@ -78,7 +79,7 @@
 |---|---|---|
 | IQR-based anomaly detection | ✅ | Per-column outlier count + sample values |
 | Correlation heatmap | ✅ | Pearson, color-coded grid for all numeric columns |
-| Guided workflow card | ✅ | Explains IQR method and how to interpret results |
+| How-to help | ✅ | "How to use this page" (ⓘ) explains the IQR rule and how to read correlations |
 
 ---
 
@@ -167,7 +168,7 @@
 
 | Feature | Status | Notes |
 |---|---|---|
-| Guided workflow cards (all 5 tabs) | ✅ | Indigo info card at top of each workspace tab |
+| Guided help on every tab | ✅ | "How to use this page" ⓘ next to each tab's heading: numbered steps using the real button names; opens by itself on the first visit to each tab (remembered in the browser), then on click; closes with Got it, Esc or a click outside |
 | Landing page (hero, features, contact) | ✅ | |
 | Contact form | ✅ | Opens the visitor's email app with the message filled in, addressed to the team email (there is no mail server, so nothing claims to be sent) |
 | React Error Boundary (all tabs) | ✅ | Crash recovery — shows error + "Try again" button |

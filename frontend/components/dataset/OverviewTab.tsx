@@ -260,10 +260,11 @@ export function OverviewTab({ workspace, cleaningDetection, onNavigate, extraRow
                         <td
                           key={col}
                           className={`whitespace-nowrap px-4 py-2 font-mono ${
-                            isEmpty ? "italic text-slate-300" : "text-slate-700"
+                            isEmpty ? "text-slate-300" : "text-slate-700"
                           }`}
+                          title={isEmpty ? "Empty cell" : undefined}
                         >
-                          {isEmpty ? "null" : String(val)}
+                          {isEmpty ? <span aria-label="empty">—</span> : String(val)}
                         </td>
                       );
                     })}

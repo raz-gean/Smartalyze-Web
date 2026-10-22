@@ -77,6 +77,8 @@ class AIAnalyzeContext(BaseModel):
     trends: list[TrendSummaryItem] = []
     anomalies: list[AnomalySummaryItem] = []
     top_correlations: list[CorrelationPair] = []
+    # Explore → Aggregation's suggested groupings, as plain sentences (title + reason).
+    suggested_groupings: list[str] = []
 
 
 class AIAnalyzeRequest(BaseModel):

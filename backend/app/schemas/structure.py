@@ -38,9 +38,21 @@ class ColumnStructureSummary(BaseModel):
     top_values: list[TopValue] = Field(default_factory=list)
 
 
+class GroupingSuggestion(BaseModel):
+    """A suggested Aggregation setup (see grouping_suggestion_service)."""
+    group_by: str
+    aggregate_column: str
+    aggregate_func: str
+    title: str
+    reason: str
+    strength: float | None = None  # η²: share of the number column's variation explained by the groups
+    strength_label: str | None = None  # "strong" / "moderate"; None for a row count
+
+
 class StructureSummaryResponse(BaseModel):
     row_count: int
     column_count: int
     missing_cells: int
     duplicate_rows: int
     columns: list[ColumnStructureSummary]
+    grouping_suggestions: list[GroupingSuggestion] = Field(default_factory=list)

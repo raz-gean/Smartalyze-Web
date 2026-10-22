@@ -71,24 +71,6 @@ export function PredictTab(props: PredictTabProps) {
 
   return (
     <div className="space-y-6">
-      {/* Guided workflow hint */}
-      <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-4">
-        <p className="text-sm font-semibold text-indigo-800">How to use this tab</p>
-        <p className="text-sm text-indigo-700 mt-0.5">
-          Select a <strong>Date column</strong> (optional) for time-based forecasting, then choose a <strong>numeric column to forecast</strong>. Set how many steps ahead you want to predict, then click <strong>Run prediction</strong>. Best results with 20+ rows of consistent data.
-        </p>
-      </div>
-      <div className="rounded-2xl border border-sky-100 bg-sky-50/60 p-4">
-        <p className="text-sm font-semibold text-sky-900">ML-Based Predictions</p>
-        <p className="mt-1 text-xs text-slate-600 leading-relaxed">
-          Smartalyze uses a machine learning regression model (linear regression) to fit a trend to your selected column and project it forward.{" "}
-          <span className="text-slate-400">
-            Best with 20+ rows of consistent numeric data. The date column is optional —
-            if omitted, row order is used as the time axis.
-          </span>
-        </p>
-      </div>
-
       <div className="grid gap-4 md:grid-cols-4">
         <label className="block rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <span className="mb-1 block text-sm font-medium text-slate-900">Date column (optional)</span>

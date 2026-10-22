@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import math
+import warnings
 from typing import Any
 
 import pandas as pd
 
+from app.services.grouping_suggestion_service import suggest_groupings
 from app.services.quality_detection_service import is_code_like
 
 
@@ -37,9 +39,22 @@ def _infer_kind(series: pd.Series) -> str:
         return "unknown"
 
     # Code/ID columns ("08100") are labels, not numbers: summarise them as text/categories.
-    coerced = pd.to_numeric(non_null.astype(str).str.strip(), errors="coerce")
-    if coerced.notna().mean() >= 0.8 and not is_code_like(series.name, non_null):
+    text = non_null.astype(str).str.strip()
+    code_like = is_code_like(series.name, non_null)
+    coerced = pd.to_numeric(text, errors="coerce")
+    if coerced.notna().mean() >= 0.8 and not code_like:
         return "numeric"
+
+    # Dates typed as text ("2024-01-05", "July 21 2005"): same 85% rule as the cleaning scan,
+    # so Explore and the Edit tab call the column the same thing.
+    if not code_like:
+        sample = text.head(500)  # parsing is element-wise for mixed formats; a sample is enough
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Could not infer format*", category=UserWarning)
+            month_first = pd.to_datetime(sample, errors="coerce", dayfirst=False).notna().mean()
+            day_first = pd.to_datetime(sample, errors="coerce", dayfirst=True).notna().mean()
+        if max(month_first, day_first) >= 0.85:
+            return "datetime_string"
 
     unique_ratio = non_null.nunique(dropna=True) / max(len(non_null), 1)
     if unique_ratio <= 0.5:
@@ -86,7 +101,7 @@ def compute_structure_summary(frame: pd.DataFrame, *, top_values_limit: int = 5)
                     "median": _safe_float(numeric_series.median()),
                 }
 
-        if kind in {"categorical", "text", "boolean"}:
+        if kind in {"categorical", "text", "boolean", "datetime_string"}:
             non_null = series.dropna()
             if not non_null.empty:
                 counts = non_null.astype(str).value_counts().head(top_values_limit)
@@ -102,4 +117,5 @@ def compute_structure_summary(frame: pd.DataFrame, *, top_values_limit: int = 5)
         "missing_cells": missing_cells,
         "duplicate_rows": duplicate_rows,
         "columns": columns,
+        "grouping_suggestions": suggest_groupings(frame),
     }

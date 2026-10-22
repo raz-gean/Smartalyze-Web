@@ -64,6 +64,26 @@ def test_analysis_context_marks_sections_this_view_does_not_cover():
     assert "Do not say whether there are any" in text
 
 
+def test_analysis_context_lists_suggested_groupings():
+    explore = AIAnalyzeContext(
+        dataset_name="sales.csv", row_count=10, col_count=3,
+        suggested_groupings=["Average Sales by Region: Region explains about 62% of the differences in Sales."],
+    )
+    text = _build_analyze_context_text(explore)
+    assert "Suggested groupings" in text and "Average Sales by Region" in text
+    assert "Suggested for your data" in _ANALYZE_SYSTEM_PROMPT
+
+
+def test_trends_are_described_as_row_order_and_fills_match_the_app():
+    explore = AIAnalyzeContext(
+        dataset_name="sales.csv", row_count=10, col_count=3,
+        trends=[{"column": "Sales", "direction": "increasing", "slope": 1.0, "r_squared": 0.8}],
+    )
+    text = _build_analyze_context_text(explore)
+    assert "from the first row to the last" in text and "change per row" in text
+    assert "median for number columns" in _SYSTEM_PROMPT
+
+
 def test_invented_dollar_signs_are_removed():
     assert _clean_answer("Average sales are $242, ranging from $ 120 to $950.") == "Average sales are 242, ranging from 120 to 950."
     assert _clean_answer("Use the $ symbol only in text.") == "Use the $ symbol only in text."

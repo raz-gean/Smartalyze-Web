@@ -46,6 +46,7 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 | S8 | File size shows "0 B" after an Edit save, or jumps after other saves | Visible bug | ✅ Done (Oct 22): saved versions get their size as a CSV file (cleaning used pandas' in-memory size, Edit used 0); uploads keep the uploaded file's size |
 | S9 | Older failing test `test_analyze_quality_combined` (spelling-variant grouping on a mixed dataset) | Test suite is 52/53 | ✅ Done (Oct 22): the ID guard now counts unique labels ignoring case/spacing, so a small gender column is checked again; new test keeps IDs skipped |
 | S10 | AI answer quality (Groq): answers sometimes cut off (512-token limit with a reasoning model); markdown shows as raw `**`; AI names buttons Smartalyze doesn't have; adds `$` the data doesn't have; says IQR fences hold "about 95%" of data (wrong); first Detect summary can miss the outliers (context built before anomaly results arrive) | Visible in Ask AI / AI Analysis at the defense | ✅ Done (Phase 1) |
+| S11 | Objective 4 says the system gives *recommendations* about grouping; Explore → Aggregation only let the user pick | Objective 4 (p.6) | ✅ Done (Oct 23): "Suggested for your data" cards ranked by η² (one-way ANOVA effect size); tests in `tests/test_grouping_suggestions.py` |
 
 ---
 
@@ -95,7 +96,7 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 | ID | Change | Decision and reasoning | Status |
 |---|---|---|---|
 | U1 | **Calm theme + dark mode** | Neutral grays with purple only for main actions (today's white-and-purple is too bright and busy). Light/dark switch that follows the computer's setting. Light stays available because printed manuscript screenshots and some users read better in light. All colors defined once as theme tokens; charts get their own dark-mode colors. | 🟡 Mockup |
-| U2 | **"How to use this page" help icon** in the workspace | Replaces the large guide cards at the top of each tab. A ⓘ button opens the steps on **click** (hover shows a label only; hover doesn't work on touch or for keyboard users). The guide opens by itself on a user's **first visit** to each tab, then stays behind the icon, so the "guided workflow for non-technical users" claim stays true. | 🟡 Mockup |
+| U2 | **"How to use this page" help icon** in the workspace | Replaces the large guide cards at the top of each tab. A ⓘ button opens the steps on **click** (hover shows a label only; hover doesn't work on touch or for keyboard users). The guide opens by itself on a user's **first visit** to each tab, then stays behind the icon, so the "guided workflow for non-technical users" claim stays true. | ✅ Done (Oct 23) |
 | U3 | **AI generated once per dataset version** | AI summaries and chat history are kept while the dataset is open, instead of being regenerated on every tab switch (slower, uses up Groq's free limit, gives different answers each time). Regenerate only after Apply / Save / Restore or when the user clicks **Regenerate**. Also fixes the Detect summary that missed the outliers (S10). | ✅ Done (Phase 1) |
 | U4 | **One slide-in "Ask AI" panel** | A narrow (~380 px) panel from the right, the same on every tab, opened from the workspace header; replaces the wide horizontal chat boxes. Keeps its conversation across tabs (with U3). Bottom sheet on small screens. | ✅ Done (Phase 1) |
 | U6 | **Plain-language polish (QA findings, Oct 22)** | Prepare no longer shows stale issues/fixes after an Edit save, Restore or Re-scan; plain type names on Explore (Numbers, Categories, Dates…); short chart axis numbers; History says Uploaded / Cleaned / Edited / Restored; correct singular/plural in issue texts ("1 missing value"); one health-score formula for Dashboard and Overview, Edit shows "Filled cells"; visible "unusual" outlier cells in Edit; filled columns say "Filled. Save to keep these changes." | ✅ Done |
@@ -108,6 +109,7 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 | D19 | All screenshots / user manual | Retake every screenshot after the UI freeze (light theme for print). | ⬜ |
 | D20 | NFR 4 Interaction Capability, p.49 | Add: "light and dark themes; help available on every workspace page; one AI assistant panel shared across tabs." | ⬜ |
 | D21 | AI sections (FR 7, FR 8, DFD 7.0) | Add that AI explanations are generated once per dataset version and refreshed when the data changes (fewer external requests). | ⬜ |
+| D22 | Objective 4 / analysis module | Describe how grouping is recommended: for each category × number column pair the system computes η² (the share of the number column's variation explained by the category; one-way ANOVA effect size) and suggests the strongest (η² ≥ 0.06, "strong" ≥ 0.14), plus a row count. Also say the recommendations come from statistical rules and linear regression, explained by the LLM. | ⬜ |
 
 ---
 
@@ -155,6 +157,7 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 | S8 | File size display | Sys | ✅ |
 | S9 | Failing older test | Sys | ✅ |
 | S10 | AI answer quality (Groq) | Sys | ✅ Done (Phase 1) |
+| S11 | Objective 4: grouping recommendations | Sys | ✅ |
 | D1 | Scope: remove "predictive analysis" | Doc | ⬜ |
 | D2 | "Machine learning" wording for IQR | Doc | ⬜ |
 | D3 | "Encrypted" → "hashed" passwords | Doc | ⬜ |
@@ -174,10 +177,11 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 | D17 | Check references [17], [18] | Doc | ⬜ |
 | D18 | Yellow highlights | Doc | ⬜ |
 | U1 | Calm theme + dark mode switch | Sys | 🟡 Mockup |
-| U2 | Help icon replaces guide cards | Sys | 🟡 Mockup |
+| U2 | Help icon replaces guide cards | Sys | ✅ |
 | U3 | AI generated once per dataset version | Sys | ✅ Done (Phase 1) |
 | U4 | Slide-in Ask AI panel | Sys | ✅ Done (Phase 1) |
 | U6 | Plain-language polish (QA findings) | Sys | ✅ |
 | D19 | Retake screenshots after UI freeze (Nov 1) | Doc | ⬜ |
 | D20 | NFR 4: themes, help, AI panel | Doc | ⬜ |
 | D21 | AI generated once per dataset version | Doc | ⬜ |
+| D22 | Objective 4: describe suggested groupings (η²) | Doc | ⬜ |

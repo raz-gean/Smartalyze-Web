@@ -248,12 +248,25 @@ export type StructureColumnSummary = {
   max?: number | null;
 };
 
+// A suggested Aggregation setup; strength is η² (share of the number column's variation
+// explained by the groups), null for a row count.
+export type GroupingSuggestion = {
+  group_by: string;
+  aggregate_column: string;
+  aggregate_func: "mean" | "count" | "sum" | "min" | "max";
+  title: string;
+  reason: string;
+  strength: number | null;
+  strength_label: "strong" | "moderate" | null;
+};
+
 export type StructureSummaryResponse = {
   row_count: number;
   column_count: number;
   missing_cells: number;
   duplicate_rows: number;
   columns: StructureColumnSummary[];
+  grouping_suggestions?: GroupingSuggestion[];
 };
 
 export type CleanDetectResponse = {
@@ -969,6 +982,7 @@ export type AIAnalyzeContext = {
     col_b: string;
     r: number;
   }>;
+  suggested_groupings?: string[]; // Explore > Aggregation suggestions, "title: reason"
 };
 
 export type AIAnalyzeResponse = {

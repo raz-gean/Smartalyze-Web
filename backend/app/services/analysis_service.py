@@ -511,9 +511,11 @@ def group_dataset(
             detail=f"Could not aggregate column '{aggregate_column}' with '{aggregate_func}': {exc}",
         ) from exc
 
+    # Rows with an empty group value form their own group (dropna=False); label it in words
+    # rather than showing pandas' "nan".
     results = [
         GroupResult(
-            group=str(k) if k is not None else "(blank)",
+            group="(empty)" if pd.isna(k) else str(k),
             value=_safe_float(v) or 0.0,
         )
         for k, v in result_series.items()
