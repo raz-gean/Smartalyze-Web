@@ -110,6 +110,8 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 | D20 | NFR 4 Interaction Capability, p.49 | Add: "light and dark themes; help available on every workspace page; one AI assistant panel shared across tabs." | ⬜ |
 | D21 | AI sections (FR 7, FR 8, DFD 7.0) | Add that AI explanations are generated once per dataset version and refreshed when the data changes (fewer external requests). | ⬜ |
 | D22 | Objective 4 / analysis module | Describe how grouping is recommended: for each category × number column pair the system computes η² (the share of the number column's variation explained by the category; one-way ANOVA effect size) and suggests the strongest (η² ≥ 0.06, "strong" ≥ 0.14), plus a row count. Also say the recommendations come from statistical rules and linear regression, explained by the LLM. | ⬜ |
+| D23 | System Architecture › Hardware Components (p.45); Implementation Plan Phase 7 (p.80) | Hosting not described | After deployment, add where the system runs (Vercel for the web interface; Azure VM for backend + PostgreSQL, region and size) and its HTTPS address. | ⬜ |
+| D24 | Data Dictionary Tables 6–7 (pp.59–60) | Table 6 examples "upload, cleaning, result"; Table 7 Key Type column looks shifted | operation_type values: original, result, manual_edit, restore_vN; Table 7: id = Primary Key, dataset_id = Foreign Key, others "--". | ⬜ |
 
 ---
 
@@ -185,3 +187,5 @@ Tracks everything where the **capstone document** and the **system** disagree, p
 | D20 | NFR 4: themes, help, AI panel | Doc | ⬜ |
 | D21 | AI generated once per dataset version | Doc | ⬜ |
 | D22 | Objective 4: describe suggested groupings (η²) | Doc | ⬜ |
+| D23 | Describe hosting (System Architecture p.45, Phase 7 p.80) after deployment | Doc | ⬜ |
+| D24 | Data dictionary Tables 6–7: real operation types, Key Type alignment | Doc | ⬜ |
